@@ -1,0 +1,8 @@
+version=2.29
+file=EnergyMeter_JSY_MK333_SH1106_Ver2_29_PUBLIC_TEST.bin
+size=567840
+md5=8d70203868232e10e1790e37e0e447c2
+meter=JSY-MK333
+oled=SH1106
+core=ESP8266-2.7.2
+credentials=LittleFS-from-v2.28
