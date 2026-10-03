@@ -6,9 +6,10 @@ Public OTA hosting for EnergyMeter firmware.
 
 - Version: 3.00
 - Target: JSY-MK333 + SH1106
-- Size: 568448 bytes
-- MD5: `b70a7de1b4d228321d616344a1935a6e`
+- Size: 568752 bytes
+- MD5: `b17912c84bc959b9457c23cd2ad5ee0b`
 - Credentials: loaded from LittleFS; if missing or unusable, v3.00 opens the local setup portal
+- Setup AP: temporary, password generated at runtime and shown on the OLED
 - Transport: HTTPS range download triggered through MQTT
 
 Firmware filename:
