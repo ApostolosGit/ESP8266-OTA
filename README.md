@@ -1,23 +1,16 @@
 # ESP8266 OTA
 
-Temporary public OTA hosting for EnergyMeter test firmware.
+Public OTA hosting for EnergyMeter firmware.
 
-## Current test firmware
+## Current firmware
 
-- Version: 2.29
+- Version: 3.00
 - Target: JSY-MK333 + SH1106
-- Size: 567840 bytes
-- MD5: `8d70203868232e10e1790e37e0e447c2`
-- Credentials: loaded from LittleFS previously migrated by v2.28
+- Size: 568448 bytes
+- MD5: `b70a7de1b4d228321d616344a1935a6e`
+- Credentials: loaded from LittleFS; if missing or unusable, v3.00 opens the local setup portal
+- Transport: HTTPS range download triggered through MQTT
 
 Firmware filename:
 
-`EnergyMeter_JSY_MK333_SH1106_Ver2_29_PUBLIC_TEST.bin`
-
-Raw OTA URL:
-
-`https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA/main/EnergyMeter_JSY_MK333_SH1106_Ver2_29_PUBLIC_TEST.bin`
-
-MQTT admin command:
-
-`ota_https|567840|8d70203868232e10e1790e37e0e447c2|https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA/main/EnergyMeter_JSY_MK333_SH1106_Ver2_29_PUBLIC_TEST.bin`
+`EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin`
