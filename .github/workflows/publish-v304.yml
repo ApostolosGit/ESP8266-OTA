@@ -1,0 +1,52 @@
+name: Publish v3.04 OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v304.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ARTIFACT_URL: "https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-b458-8210-aadc-2b9146e95768/raw?se=2026-10-03T15%3A22%3A42Z&sp=r&sv=2026-02-06&sr=b&scid=5eafb3c4-d6e0-562d-a5cc-6a33f18eedca&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-03T06%3A05%3A26Z&ske=2026-10-04T06%3A05%3A26Z&sks=b&skv=2026-02-06&sig=bmSTD0JXb7PlmA16fophMmguR5QOdNK7PbxZjLKDPVw%3D"
+      ZIP_SHA256: "6207b6ad19a8be2c883f1877b95158706932472aeec99c5e99d2b7847b586843"
+      BIN_SIZE: "570176"
+      BIN_MD5: "d0e8b7b01f8356598a04236a7e717915"
+      OUT_FILE: "EnergyMeter_JSY_MK333_SH1106_Ver3_04.bin"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified CI artifact
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 "$ARTIFACT_URL" -o artifact.zip
+          echo "$ZIP_SHA256  artifact.zip" | sha256sum -c -
+          unzip -q artifact.zip -d artifact
+          test -f artifact/EnergyMeter_CI.ino.bin
+          test "$(stat -c%s artifact/EnergyMeter_CI.ino.bin)" = "$BIN_SIZE"
+          echo "$BIN_MD5  artifact/EnergyMeter_CI.ino.bin" | md5sum -c -
+      - name: Publish binary and manifest
+        run: |
+          set -euo pipefail
+          mv artifact/EnergyMeter_CI.ino.bin "$OUT_FILE"
+          cat > manifest.txt <<'EOF'
+          version=3.04
+          file=EnergyMeter_JSY_MK333_SH1106_Ver3_04.bin
+          size=570176
+          md5=d0e8b7b01f8356598a04236a7e717915
+          meter=JSY-MK333
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=4aa79b3738d47f73fdbaece8030a83bb13bc368c
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT_FILE" manifest.txt
+          git commit -m "Publish EnergyMeter v3.04 JSY-MK333 SH1106"
+          git push
