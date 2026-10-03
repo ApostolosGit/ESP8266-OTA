@@ -1,10 +1,10 @@
-version=3.00
-file=EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin
+version=3.01
+file=EnergyMeter_JSY_MK333_SH1106_Ver3_01.bin
 size=569456
-md5=198fc943514c20a525c890c9f05f2a0a
+md5=448d0818f0bd0617c31ddb4bfcd731a7
 meter=JSY-MK333
 oled=SH1106
 core=ESP8266-2.7.2
 credentials=LittleFS-or-setup-portal
 transport=https-range
-build=f5c53ded7cb7c67f0bdb46f451e8e0214d11b848
+build=da39f51bff1c14c16ff3354ae028d99837830e4e
