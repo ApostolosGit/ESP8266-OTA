@@ -1,0 +1,53 @@
+name: Publish EnergyMeter v3.00 OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-v300.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verified CI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-f1bc-8210-afad-a3f9f4081582/raw?se=2026-10-03T12%3A03%3A34Z&sp=r&sv=2026-02-06&sr=b&scid=0dd040c2-0f59-5db3-8555-717354b50374&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-02T20%3A01%3A59Z&ske=2026-10-03T20%3A01%3A59Z&sks=b&skv=2026-02-06&sig=gfRGEvrD2R3MQWY%2BaSjx6T1XgbIvpMqCiI2vELwWVRE%3D' -o firmware.zip
+          echo '61726b0418a170798a2f68e7804dc9d980b1ada84eddafbe54ca2db813ca8ddd  firmware.zip' | sha256sum -c -
+          unzip -o firmware.zip
+          test -f EnergyMeter_CI.ino.bin
+          mv EnergyMeter_CI.ino.bin EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin
+          test "$(stat -c%s EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin)" = "568448"
+          test "$(md5sum EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin | awk '{print $1}')" = "b70a7de1b4d228321d616344a1935a6e"
+
+      - name: Update OTA manifest
+        shell: bash
+        run: |
+          cat > manifest.txt <<'EOF'
+          version=3.00
+          file=EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin
+          size=568448
+          md5=b70a7de1b4d228321d616344a1935a6e
+          meter=JSY-MK333
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          EOF
+
+      - name: Commit OTA binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin manifest.txt
+          git commit -m "Publish EnergyMeter JSY SH1106 v3.00 OTA"
+          git push
