@@ -1,7 +1,7 @@
 version=3.00
 file=EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin
-size=568448
-md5=b70a7de1b4d228321d616344a1935a6e
+size=568752
+md5=b17912c84bc959b9457c23cd2ad5ee0b
 meter=JSY-MK333
 oled=SH1106
 core=ESP8266-2.7.2
