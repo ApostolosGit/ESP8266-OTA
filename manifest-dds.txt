@@ -1,8 +1,8 @@
 version=3.13
-file=EnergyMeter_JSY_MK333_SSD1309_Ver3_13.bin
-size=568848
-md5=23b740c6882bc6d1bcc4105c91d2ed57
-meter=JSY-MK333
+file=EnergyMeter_DDS238_SSD1309_Ver3_13.bin
+size=558912
+md5=e9698bdf4dcb6d4622fa3f99fa873c8d
+meter=DDS238
 oled=SSD1309
 core=ESP8266-2.7.2
 credentials=LittleFS-or-setup-portal
