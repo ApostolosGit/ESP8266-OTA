@@ -4,14 +4,19 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: 3.00
-- Target: JSY-MK333 + SH1106
-- Size: 568752 bytes
-- MD5: `b17912c84bc959b9457c23cd2ad5ee0b`
-- Credentials: loaded from LittleFS; if missing or unusable, v3.00 opens the local setup portal
-- Setup AP: temporary, password generated at runtime and shown on the OLED
+- Version: 3.13
+- Targets:
+  - JSY-MK333 + SSD1309 (OLED2)
+  - DDS238 + SSD1309 (OLED2)
+- Credentials: loaded from LittleFS; if missing or unusable, the firmware opens the local setup portal
+- Setup AP address: 192.168.1.80
 - Transport: HTTPS range download triggered through MQTT
+- CI gate: JSY-MK333 + OLED2 and DDS238 + OLED2 must both pass
 
-Firmware filename:
+Current manifests:
 
-`EnergyMeter_JSY_MK333_SH1106_Ver3_00.bin`
+- `manifest-jsy.txt`
+- `manifest-dds.txt`
+- `manifest.txt` remains the JSY manifest for backward compatibility with older MQTT.app versions.
+
+MQTT.app v2.07+ selects the correct manifest automatically by meter type.
