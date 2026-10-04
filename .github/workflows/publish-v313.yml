@@ -1,0 +1,86 @@
+name: Publish v3.13 OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v313.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      JSY_ARTIFACT_URL: "https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-abf8-8210-8e44-25a155c4e768/raw?se=2026-10-04T16%3A52%3A50Z&sp=r&sv=2026-02-06&sr=b&scid=fa8f7712-b3cc-5f2e-b46e-60b086b8f2a5&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-04T04%3A13%3A21Z&ske=2026-10-05T04%3A13%3A21Z&sks=b&skv=2026-02-06&sig=jYiTpTIk2xpFUBZuWCzqrvYnjBCyRMbR9P6FGq%2Bj7o0%3D"
+      DDS_ARTIFACT_URL: "https://sdmntpritalynorth.oaiusercontent.com/files/00000000-97f8-8246-a818-94c11501fa2b/raw?se=2026-10-04T16%3A54%3A37Z&sp=r&sv=2026-02-06&sr=b&scid=ab2b4111-a4bc-5de7-8bf5-2479940e5ddf&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-04T10%3A47%3A17Z&ske=2026-10-05T10%3A47%3A17Z&sks=b&skv=2026-02-06&sig=SIWzUkUEq%2BtG6VoSXmj7rcR5hENBG24TKXdardl0l5c%3D"
+      JSY_ZIP_SHA256: "e0171a91cd26216ed5fd4bc4a95d1e0e96253989a3bb46d73869776fd2d7fb18"
+      DDS_ZIP_SHA256: "91df70a1756f37fbdae32ef158a1501b3c68d4ea336b1c9e5d02b77cef339c9d"
+      JSY_BIN_SIZE: "568848"
+      DDS_BIN_SIZE: "558912"
+      JSY_BIN_MD5: "23b740c6882bc6d1bcc4105c91d2ed57"
+      DDS_BIN_MD5: "e9698bdf4dcb6d4622fa3f99fa873c8d"
+      JSY_OUT: "EnergyMeter_JSY_MK333_SSD1309_Ver3_13.bin"
+      DDS_OUT: "EnergyMeter_DDS238_SSD1309_Ver3_13.bin"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify CI artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 "$JSY_ARTIFACT_URL" -o jsy.zip
+          curl -fL --retry 3 --retry-delay 2 "$DDS_ARTIFACT_URL" -o dds.zip
+          echo "$JSY_ZIP_SHA256  jsy.zip" | sha256sum -c -
+          echo "$DDS_ZIP_SHA256  dds.zip" | sha256sum -c -
+          mkdir -p artifact-jsy artifact-dds
+          unzip -q jsy.zip -d artifact-jsy
+          unzip -q dds.zip -d artifact-dds
+          test -f artifact-jsy/EnergyMeter_CI.ino.bin
+          test -f artifact-dds/EnergyMeter_CI.ino.bin
+          test "$(stat -c%s artifact-jsy/EnergyMeter_CI.ino.bin)" = "$JSY_BIN_SIZE"
+          test "$(stat -c%s artifact-dds/EnergyMeter_CI.ino.bin)" = "$DDS_BIN_SIZE"
+          echo "$JSY_BIN_MD5  artifact-jsy/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "$DDS_BIN_MD5  artifact-dds/EnergyMeter_CI.ino.bin" | md5sum -c -
+      - name: Publish binaries and target manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv artifact-jsy/EnergyMeter_CI.ino.bin "$JSY_OUT"
+          mv artifact-dds/EnergyMeter_CI.ino.bin "$DDS_OUT"
+
+          cat > manifest-jsy.txt <<'EOF'
+          version=3.13
+          file=EnergyMeter_JSY_MK333_SSD1309_Ver3_13.bin
+          size=568848
+          md5=23b740c6882bc6d1bcc4105c91d2ed57
+          meter=JSY-MK333
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=1384e3c0437e49ded9336583a64320989aaaeb2b
+          EOF
+
+          cat > manifest-dds.txt <<'EOF'
+          version=3.13
+          file=EnergyMeter_DDS238_SSD1309_Ver3_13.bin
+          size=558912
+          md5=e9698bdf4dcb6d4622fa3f99fa873c8d
+          meter=DDS238
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=1384e3c0437e49ded9336583a64320989aaaeb2b
+          EOF
+
+          # Backward compatibility with MQTT.app v2.06, whose single manifest
+          # path is currently used by JSY devices.
+          cp manifest-jsy.txt manifest.txt
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$JSY_OUT" "$DDS_OUT" manifest.txt manifest-jsy.txt manifest-dds.txt
+          git commit -m "Publish EnergyMeter v3.13 OTA for JSY and DDS OLED2"
+          git push
