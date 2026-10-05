@@ -18,3 +18,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify local images, public manifests and HTTPS byte ranges
         run: python3 tests/verify_release.py --remote
+
+# v4.00 verification trigger
