@@ -4,7 +4,7 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: **3.16**
+- Version: **3.17**
 - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
 - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
 - Credentials: loaded from LittleFS; missing/invalid saved settings open the local setup portal.
@@ -17,11 +17,12 @@ Public OTA hosting for EnergyMeter firmware.
 - Editing an E.K. keeps the original source time; deleting the latest active E.K. restores the preceding basis and intervening net energy.
 - Failures remain visible for at least 4 seconds while normal metering and reconnect work continue; queued categories and checksum-protected RTC replay preserve causes through redraws/restarts.
 - Setup/recovery AP uses explicit .81–.100 DHCP leases; FLASH can open/retry setup in Recovery without leaving that mode. Recovery remains OTA-only.
+- Setup AP Wi-Fi is open, with no network password. In AP mode only, all web pages/actions require PIN 12134; normal LAN web access keeps its existing behavior. PIN login uses a random browser session, valid for 15 minutes and reset when AP closes/reopens.
 - Setup AP address: 192.168.1.80.
 - Transport: HTTPS range download triggered through MQTT.
 - CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
-- Build source: `8e22b823ff1f3d951065f06b1576163a0b92c36a`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37285893921
+- Build source: `0e9df7c4bb12822f71e82e4f4b6b5817f379c97a`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37298685939
 
 ## Manifests
 
