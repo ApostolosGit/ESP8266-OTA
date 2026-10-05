@@ -4,7 +4,7 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: **3.18**
+- Version: **3.19**
 - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
 - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
 - Wi-Fi/MQTT login secrets: loaded from LittleFS; broker host/port: compiled public settings; missing/invalid saved settings open the local setup portal.
@@ -20,11 +20,13 @@ Public OTA hosting for EnergyMeter firmware.
 - Setup AP Wi-Fi is open, with no network password. In AP mode only, all web pages/actions require PIN 12134; normal LAN web access keeps its existing behavior. PIN login uses a random browser session, valid for 15 minutes and reset when AP closes/reopens.
 - Dashboard follows the supplied utility/measurements/network layout, with Phase–W–V–A–PF columns. Dashboard/setup/debug text uses 22 px; visible IDE OTA labels use IDE_OTA.
 - Broker host/port are public compiled settings. Setup keeps only Wi-Fi SSID/password and MQTT username/password. Existing saved login secrets survive OTA; the compiled broker overrides older stored host/port.
+- Clear credentials and Save & restart schedule an automatic restart after 1200 ms in LAN, AP, failed-AP and Recovery modes. Clearing removes only Wi-Fi/MQTT settings, so boot opens Setup AP; firmware OTA retains stored settings.
+- Compact dashboard matches the new reference, with Z1/Z2 first, power beside Measurements, frequency/debug beside import/export, and setup/device footer.
 - Setup AP address: 192.168.1.80.
 - Transport: HTTPS range download triggered through MQTT.
 - CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
-- Build source: `efb5257c96e685d588773659f1ac2e762dcc39d2`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37325900658
+- Build source: `35903a2e427a81720594f02c6e2f66311bc705ff`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37331546660
 
 ## Manifests
 
