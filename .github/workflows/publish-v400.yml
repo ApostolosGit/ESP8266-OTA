@@ -1,0 +1,165 @@
+name: Publish v4.00 OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v400.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DDS_SSD_URL: 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-9090-8210-a589-d8a64a655e56/raw?se=2026-10-05T16%3A59%3A12Z&sp=r&sv=2026-02-06&sr=b&scid=9090626d-8bda-5bd4-8eb0-b4efcbd18ae4&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-05T04%3A03%3A21Z&ske=2026-10-06T04%3A03%3A21Z&sks=b&skv=2026-02-06&sig=/I/yDaudUO4xPi38M1MjN2ASvq9pzD5yYqPnmfWH2i4%3D'
+      DDS_SH_URL: 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-8770-8210-af68-34e50a73a800/raw?se=2026-10-05T16%3A59%3A12Z&sp=r&sv=2026-02-06&sr=b&scid=d8d71ac7-2095-57b9-bf2c-82e8076baf95&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-05T04%3A26%3A19Z&ske=2026-10-06T04%3A26%3A19Z&sks=b&skv=2026-02-06&sig=LM2isP2wRmvjaGq6NgjX5/6Bugx3uH8JA87yZ97qNtw%3D'
+      JSY_SSD_URL: 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-5010-8210-8560-acb0e95672d9/raw?se=2026-10-05T16%3A59%3A12Z&sp=r&sv=2026-02-06&sr=b&scid=5a7a445b-7a74-569a-82aa-b9ef3044f286&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-05T06%3A54%3A18Z&ske=2026-10-06T06%3A54%3A18Z&sks=b&skv=2026-02-06&sig=vr/8/H8Fx80RPCmh986HhSkp47QgSGj9eXcaRNMx1no%3D'
+      JSY_SH_URL: 'https://sdmntprdenmarkeast.oaiusercontent.com/files/00000000-a3b4-8210-baa8-1fd06f1e6b46/raw?se=2026-10-05T16%3A59%3A12Z&sp=r&sv=2026-02-06&sr=b&scid=711dc1da-9638-5631-ad19-bec107e193bb&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-05T08%3A02%3A12Z&ske=2026-10-06T08%3A02%3A12Z&sks=b&skv=2026-02-06&sig=setC/wN68MsRlfpEs9Kw9XsmCBlB%2BbCauyRYl0kjIWQ%3D'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify four CI artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 "$DDS_SSD_URL" -o dds-ssd.zip
+          curl -fL --retry 3 --retry-delay 2 "$DDS_SH_URL" -o dds-sh.zip
+          curl -fL --retry 3 --retry-delay 2 "$JSY_SSD_URL" -o jsy-ssd.zip
+          curl -fL --retry 3 --retry-delay 2 "$JSY_SH_URL" -o jsy-sh.zip
+
+          echo "75761b0c9cc941b30b4a08e90624b811aad48fdb4d3ff83d3a1b51ec493e7873  dds-ssd.zip" | sha256sum -c -
+          echo "7822c4d247abec6300770cd03afc0c820e694ac26f6cdf9c83953167dfd3739f  dds-sh.zip" | sha256sum -c -
+          echo "6fc3a206a5cf233ff51ce47881debbbcd5e6aadbd7a5793b275a5bf1f228b22f  jsy-ssd.zip" | sha256sum -c -
+          echo "366e3960405946e494aea54bd4371771df1cd41c3b27f75dcf41c9c2b71978a7  jsy-sh.zip" | sha256sum -c -
+
+          for p in dds-ssd dds-sh jsy-ssd jsy-sh; do
+            mkdir -p "$p"
+            unzip -q "$p.zip" -d "$p"
+            test -f "$p/EnergyMeter_CI.ino.bin"
+          done
+
+          test "$(stat -c%s dds-ssd/EnergyMeter_CI.ino.bin)" = "580704"
+          test "$(stat -c%s dds-sh/EnergyMeter_CI.ino.bin)" = "580800"
+          test "$(stat -c%s jsy-ssd/EnergyMeter_CI.ino.bin)" = "585904"
+          test "$(stat -c%s jsy-sh/EnergyMeter_CI.ino.bin)" = "585984"
+
+          echo "4e27158d612f73b950315e48484ca616  dds-ssd/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "3db23a033cf648565546902356c77f8c  dds-sh/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "3ab8f267a75c4e18262163a97bca29ea  jsy-ssd/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "85f74c89f0e52608ed7ebed7562fab72  jsy-sh/EnergyMeter_CI.ino.bin" | md5sum -c -
+
+      - name: Publish v4.00 binaries, manifests and documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mv dds-ssd/EnergyMeter_CI.ino.bin EnergyMeter_DDS238_SSD1309_Ver4_00.bin
+          mv dds-sh/EnergyMeter_CI.ino.bin EnergyMeter_DDS238_SH1106_Ver4_00.bin
+          mv jsy-ssd/EnergyMeter_CI.ino.bin EnergyMeter_JSY_MK333_SSD1309_Ver4_00.bin
+          mv jsy-sh/EnergyMeter_CI.ino.bin EnergyMeter_JSY_MK333_SH1106_Ver4_00.bin
+
+          cat > manifest-dds.txt <<'EOF'
+          version=4.00
+          file=EnergyMeter_DDS238_SSD1309_Ver4_00.bin
+          size=580704
+          md5=4e27158d612f73b950315e48484ca616
+          meter=DDS238
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=735e001c25bef1779fa2386f0a9325f1d4f84f95
+          EOF
+
+          cat > manifest-dds-sh1106.txt <<'EOF'
+          version=4.00
+          file=EnergyMeter_DDS238_SH1106_Ver4_00.bin
+          size=580800
+          md5=3db23a033cf648565546902356c77f8c
+          meter=DDS238
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=735e001c25bef1779fa2386f0a9325f1d4f84f95
+          EOF
+
+          cat > manifest-jsy.txt <<'EOF'
+          version=4.00
+          file=EnergyMeter_JSY_MK333_SSD1309_Ver4_00.bin
+          size=585904
+          md5=3ab8f267a75c4e18262163a97bca29ea
+          meter=JSY-MK333
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=735e001c25bef1779fa2386f0a9325f1d4f84f95
+          EOF
+
+          cat > manifest-jsy-sh1106.txt <<'EOF'
+          version=4.00
+          file=EnergyMeter_JSY_MK333_SH1106_Ver4_00.bin
+          size=585984
+          md5=85f74c89f0e52608ed7ebed7562fab72
+          meter=JSY-MK333
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=735e001c25bef1779fa2386f0a9325f1d4f84f95
+          EOF
+
+          cp manifest-jsy.txt manifest.txt
+
+          cat > README.md <<'EOF'
+          # ESP8266 OTA
+
+          Public OTA hosting for EnergyMeter firmware.
+
+          ## Current firmware
+
+          - Version: **4.00**
+          - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
+          - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
+          - **Καταχώρηση Ένδειξης Μετρητή ΔΕΗ** uses the ESP's current local date/time and a fresh physical-meter read, stores the same-moment internal Import/Export anchor, drives **Εκτίμηση τώρα**, and is the only entry type used for accuracy/% evaluation.
+          - **Καταχώρηση Μέτρησης ΔΕΗ** stores the historical DEH measurement date/value as comparison-only data. It never remaps historical ESP counters and never replaces the estimate anchor.
+          - Of multiple DEH measurements, **Τελευταία ΔΕΗ** is the one with the most recent DEH measurement date/time.
+          - Live dashboard difference is **Diff = Εκτίμηση τώρα − Τελευταία ΔΕΗ** and may be positive or negative, including with photovoltaic export.
+          - Net energy uses Import − Export; directional anchors remain checksum-protected and persistent.
+          - Local dashboard keeps Network Debug and **Netword Setup** on the same line.
+          - Wi-Fi/MQTT login secrets are loaded from LittleFS; broker host/port are compiled public settings.
+          - Setup AP address: 192.168.1.80.
+          - Transport: HTTPS range download triggered through MQTT.
+          - CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
+          - Build source: `735e001c25bef1779fa2386f0a9325f1d4f84f95`.
+          - Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37343697457
+
+          ## Manifests
+
+          MQTT.app selects by meter/OLED profile:
+
+          - `manifest-jsy.txt`: JSY-MK333 + SSD1309.
+          - `manifest-dds.txt`: DDS238 + SSD1309.
+          - `manifest-jsy-sh1106.txt`: JSY-MK333 + SH1106.
+          - `manifest-dds-sh1106.txt`: DDS238 + SH1106.
+          - `manifest.txt`: JSY + SSD1309 compatibility alias.
+
+          Every manifest contains the exact binary filename, byte size and MD5. Previous binaries remain available.
+          Publishing these files does not install firmware on devices; updates start only when requested.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            EnergyMeter_DDS238_SSD1309_Ver4_00.bin \
+            EnergyMeter_DDS238_SH1106_Ver4_00.bin \
+            EnergyMeter_JSY_MK333_SSD1309_Ver4_00.bin \
+            EnergyMeter_JSY_MK333_SH1106_Ver4_00.bin \
+            manifest-dds.txt manifest-dds-sh1106.txt \
+            manifest-jsy.txt manifest-jsy-sh1106.txt manifest.txt README.md
+          git commit -m "Publish v4.00: DEH indication and delayed measurement semantics"
+          git push
