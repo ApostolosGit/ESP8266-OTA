@@ -1,0 +1,20 @@
+name: OTA release checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'manifest*.txt'
+      - '*.bin'
+      - 'tests/verify_release.py'
+      - '.github/workflows/release-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify local images, public manifests and HTTPS byte ranges
+        run: python3 tests/verify_release.py --remote
