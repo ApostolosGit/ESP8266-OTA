@@ -4,20 +4,18 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: **4.01**
+- Version: **4.02**
 - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
 - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
-- Fixes the v3.19/v4.00 local web crash: the root page no longer reloads itself every 5 seconds, HTTP writes are guarded by free-heap/max-block checks, and flash-to-RAM write slices are reduced to 64 bytes.
-- The local page now refreshes manually, avoiding repeated HTTP allocations while MQTT/TLS is active.
-- MQTT state includes `utility_date`, the date of the latest DEH measurement used as **Τελευταία ΔΕΗ**.
-- **Καταχώρηση Μέτρησης ΔΕΗ** accepts whole kWh only; **Καταχώρηση Ένδειξης Μετρητή ΔΕΗ** retains decimal precision.
-- **Diff = Εκτίμηση τώρα − Τελευταία ΔΕΗ**, signed for photovoltaic export/import.
-- Local latest/DEH display uses whole kWh.
-- Setup links remain aligned as **Network Debug** and **Netword Setup**.
-- Transport: HTTPS range download triggered through MQTT.
-- CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
-- Build source: `61d06fd72b5b9b3a7796878db2c07a5584cf9c62`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37349702593
+- MQTT runtime recovery now survives router/Internet interruptions without ESP restart.
+- A dead PubSubClient keepalive explicitly tears down stale BearSSL/TCP state.
+- After a previously healthy MQTT connection drops, reconnect retries use 5 s, 10 s, then 30 s maximum.
+- Runtime MQTT reconnects start with a clean TLS transport.
+- Local web availability is restored under MQTT/TLS load by relaxing the v4.01 heap gate while retaining 64-byte guarded writes and the removal of automatic full-page refresh.
+- v4.01 DEH semantics remain unchanged: latest DEH date is published, delayed DEH measurements are whole-kWh only, and Diff = Estimate now - Latest DEH.
+- CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and host network recovery checks passed.
+- Build source: `9ef9ab92ee386b0fe8146b9e796a40d4a7db8f1f`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37354842576
 
 ## Manifests
 
