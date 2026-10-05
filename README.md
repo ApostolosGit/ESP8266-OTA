@@ -4,7 +4,7 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: **3.15**
+- Version: **3.16**
 - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
 - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
 - Credentials: loaded from LittleFS; missing/invalid saved settings open the local setup portal.
@@ -15,11 +15,13 @@ Public OTA hosting for EnergyMeter firmware.
 - New E.K. captures the ESP's current local time after a fresh meter read and freezes signed same-period comparison before correction. T.K. accepts a declared time or the 08:00–18:00 window.
 - Full matched directional anchors are checksum-protected and persisted separately without changing V1 history storage. The app displays their net result beside the DEH reading.
 - Editing an E.K. keeps the original source time; deleting the latest active E.K. restores the preceding basis and intervening net energy.
+- Failures remain visible for at least 4 seconds while normal metering and reconnect work continue; queued categories and checksum-protected RTC replay preserve causes through redraws/restarts.
+- Setup/recovery AP uses explicit .81–.100 DHCP leases; FLASH can open/retry setup in Recovery without leaving that mode. Recovery remains OTA-only.
 - Setup AP address: 192.168.1.80.
 - Transport: HTTPS range download triggered through MQTT.
 - CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
-- Build source: `b7e156bf09c281bc5117a7de056ac1d6e35544f6`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37276389169
+- Build source: `8e22b823ff1f3d951065f06b1576163a0b92c36a`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37285893921
 
 ## Manifests
 
