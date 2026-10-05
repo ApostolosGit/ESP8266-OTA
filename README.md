@@ -4,10 +4,10 @@ Public OTA hosting for EnergyMeter firmware.
 
 ## Current firmware
 
-- Version: **3.17**
+- Version: **3.18**
 - Default app targets: DDS238 + SSD1309 and JSY-MK333 + SSD1309.
 - Additional binaries: DDS238 + SH1106 and JSY-MK333 + SH1106.
-- Credentials: loaded from LittleFS; missing/invalid saved settings open the local setup portal.
+- Wi-Fi/MQTT login secrets: loaded from LittleFS; broker host/port: compiled public settings; missing/invalid saved settings open the local setup portal.
 - With valid saved settings, Wi-Fi outages keep local metering running with periodic retries.
 - FLASH opens/closes setup AP during normal operation; an initialized meter keeps measuring in manual AP.
 - OLED/RTC startup checkpoints identify the next pending operation.
@@ -18,11 +18,13 @@ Public OTA hosting for EnergyMeter firmware.
 - Failures remain visible for at least 4 seconds while normal metering and reconnect work continue; queued categories and checksum-protected RTC replay preserve causes through redraws/restarts.
 - Setup/recovery AP uses explicit .81–.100 DHCP leases; FLASH can open/retry setup in Recovery without leaving that mode. Recovery remains OTA-only.
 - Setup AP Wi-Fi is open, with no network password. In AP mode only, all web pages/actions require PIN 12134; normal LAN web access keeps its existing behavior. PIN login uses a random browser session, valid for 15 minutes and reset when AP closes/reopens.
+- Dashboard follows the supplied utility/measurements/network layout, with Phase–W–V–A–PF columns. Dashboard/setup/debug text uses 22 px; visible IDE OTA labels use IDE_OTA.
+- Broker host/port are public compiled settings. Setup keeps only Wi-Fi SSID/password and MQTT username/password. Existing saved login secrets survive OTA; the compiled broker overrides older stored host/port.
 - Setup AP address: 192.168.1.80.
 - Transport: HTTPS range download triggered through MQTT.
 - CI gate: all four DDS238/JSY × SH1106/SSD1309 builds and firmware host checks passed.
-- Build source: `0e9df7c4bb12822f71e82e4f4b6b5817f379c97a`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37298685939
+- Build source: `efb5257c96e685d588773659f1ac2e762dcc39d2`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37325900658
 
 ## Manifests
 
