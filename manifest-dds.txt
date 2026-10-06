@@ -1,10 +1,10 @@
-version=4.06
-file=EnergyMeter_DDS238_SSD1309_Ver4_06.bin
-size=588512
-md5=789fed2fe0ab42c47530688432f404ab
+version=5.00
+file=EnergyMeter_DDS238_SSD1309_Ver5_00.bin
+size=593984
+md5=46512485bb6630fa572b908ce6887ebb
 meter=DDS238
 oled=SSD1309
 core=ESP8266-2.7.2
 credentials=LittleFS-or-setup-portal
 transport=https-range
-build=528c51e158805f6645c868fc6ef6cf4b7e5dd7bd
+build=e616b6f1fded17f3ee28bb805b1d18d3aa519bd1
