@@ -1,6 +1,11 @@
 # ESP8266 OTA
 
-Current firmware: **5.55**. App: **5.55**.
+Current firmware: **5.56**. App: **5.56**.
+
+- MQTT update requests arriving within 1.5 seconds now remain pending; responses are coalesced and rate limited, and a failed publication is retried. Multiple app windows no longer silently lose their update request.
+- Retained status/health/state are discovery hints, not live replies. The app probes them before counting/displaying a device online, so a retired profile ID cannot create an empty error card beside the active MAC ID. Genuine legacy devices at another site are still discovered by their reply.
+- The app retries a missed measurement request once after 10 seconds. Live health confirms connectivity separately from fresh readings; delayed samples retain their actual reception time and are labelled as previous readings. Real sensor/network failures remain isolated per device. Reconnect cancels old deadlines and requires new live proof.
+- Regression validation reproduces the reported DDS/JSY screen, healthy/failed meters, multiple identical firmware devices, active legacy IDs, two app windows, missing replies, retained snapshots, reconnect and stale timers. All four firmware builds and desktop/mobile browser tests passed.
 
 - V5 daily history begins with the first valid physical-meter reading; upgrading from 5.00 preserves existing LittleFS history, utility readings and credentials. Old days are not reconstructed.
 - Each day stores import/export separately for Z1 and the two Z2 windows. App charts and tables show Z1, Z2 midday, Z2 night, using import minus export, including negative balances.
@@ -17,17 +22,18 @@ Current firmware: **5.55**. App: **5.55**.
 - A retained, small health message reports a missing/unresponsive physical DDS238 or JSY even when measurement publication is unavailable. It is sent on failure/recovery, MQTT reconnection and every 30 seconds. Failed physical reads do not advance energy history or counters.
 - The app distinguishes an online ESP from a failed meter, hides old live measurements while a meter error is active, and isolates parsing/rendering/request timeouts by device. A failing device cannot stop discovery and refresh of other devices.
 - App OTA timeout is three minutes. The app can confirm the firmware version from health without a physical sensor. First migration to a new MAC ID reports the newly detected ID without claiming a unique mapping from an old shared ID.
-- IMPORTANT for the first migration: if two pre-5.01 ESPs share one old ID, remote commands on that old topic cannot select one physical ESP. Upgrade with only one of those old-ID ESPs connected at a time, or use local upload. After both run 5.01, they remain separately addressable. Old retained legacy IDs can remain visible until their old broker records are cleared; the new firmware does not clear a topic that another old ESP might still use.
+- IMPORTANT for the first migration: if two pre-5.01 ESPs share one old ID, remote commands on that old topic cannot select one physical ESP. Upgrade with only one of those old-ID ESPs connected at a time, or use local upload. After both run 5.01, they remain separately addressable. Old retained legacy IDs are probed and stay hidden unless a live ESP replies. The app and firmware do not clear a topic that another old ESP might still use.
 - Successful app credentials are kept only in the current browser tab session and restored after reload; explicit disconnect or authentication rejection clears them. Browser password-manager entries are external to the app. New service-worker updates do not force navigation or reload of an active connection.
 
 - App device actions are Settings, Charts, Update; Charts and Update share the accent background. Each chart bar displays its signed kWh value above it, including zero. Wide 7/30-day and hourly charts scroll horizontally with spacing based on number length.
 - Chart rendering reuses Intl formatters, calculates each displayed bar once and suppresses repeated zero axis lines. The app removes uncalled helpers and obsolete metric-card styles, uses one automatic refresh interval per connection, and avoids automatic requests when the same device already has a pending response.
-- Firmware removes unused write-only diagnostics and an obsolete reading comparator, shares the identical public network profile, and sizes each MQTT topic buffer from the selected profile, MAC and suffix. The MQTT client ID uses the full MAC-based device ID once; stable MQTT topics are retained across a 5.01 to 5.55 upgrade.
+- Firmware removes unused write-only diagnostics and an obsolete reading comparator, shares the identical public network profile, and sizes each MQTT topic buffer from the selected profile, MAC and suffix. The MQTT client ID uses the full MAC-based device ID once; stable MQTT topics are retained across a 5.01 to 5.56 upgrade.
 - Validation includes DDS/JSY with SH1106/SSD1309, accounting/day/DST/utility regressions, sensor failure/recovery and two hardware IDs, AP/PIN/credential/reconnect/HTTP stress checks, PWA/session handling and actual browser desktop/mobile chart layout.
 
-Build source: `5462ee0f9887ab41676ddb1eb752ccf8664cca62`.
-Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37680219112
+Build source: `dd688de01dda29f728ccaf1fc947017d95a65285`.
+Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37692199113
 
 Manifests: `manifest-jsy.txt` and `manifest-dds.txt` target SSD1309; `manifest-jsy-sh1106.txt` and `manifest-dds-sh1106.txt` target SH1106. `manifest.txt` aliases JSY + SSD1309. Each lists exact filename, size and MD5. Previous binaries remain available.
 
 Publishing makes the firmware available to the app; it does not install it on devices.
+
