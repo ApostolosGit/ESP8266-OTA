@@ -1,10 +1,10 @@
-version=5.56
-file=EnergyMeter_DDS238_SH1106_Ver5_56.bin
-size=595216
-md5=9531a58b511f5a9fe6821a6ed4abf977
+version=5.57
+file=EnergyMeter_DDS238_SH1106_Ver5_57.bin
+size=596128
+md5=3b1ec1b1cba97da0228cdc25c8455084
 meter=DDS238
 oled=SH1106
 core=ESP8266-2.7.2
 credentials=LittleFS-or-setup-portal
 transport=https-range
-build=dd688de01dda29f728ccaf1fc947017d95a65285
+build=2918768beb1f320a6c5cdfe045ca7e3362122d77

@@ -1,39 +1,25 @@
 # ESP8266 OTA
 
-Current firmware: **5.56**. App: **5.56**.
+Current firmware: **5.57**. App: **5.56**.
 
-- MQTT update requests arriving within 1.5 seconds now remain pending; responses are coalesced and rate limited, and a failed publication is retried. Multiple app windows no longer silently lose their update request.
-- Retained status/health/state are discovery hints, not live replies. The app probes them before counting/displaying a device online, so a retired profile ID cannot create an empty error card beside the active MAC ID. Genuine legacy devices at another site are still discovered by their reply.
-- The app retries a missed measurement request once after 10 seconds. Live health confirms connectivity separately from fresh readings; delayed samples retain their actual reception time and are labelled as previous readings. Real sensor/network failures remain isolated per device. Reconnect cancels old deadlines and requires new live proof.
-- Regression validation reproduces the reported DDS/JSY screen, healthy/failed meters, multiple identical firmware devices, active legacy IDs, two app windows, missing replies, retained snapshots, reconnect and stale timers. All four firmware builds and desktop/mobile browser tests passed.
+- v5.57 targets the long-run JSY case where router Wi-Fi remains associated but MQTT reaches state -2 and both MQTT access and the local HTTP page become unavailable.
+- The frequent MQTT update-request parser is now allocation-free, avoiding repeated Arduino String heap churn during app auto-refresh.
+- Failed state publications stay pending but retry with 5/10/30 second backoff instead of continuously retrying every 1.5 seconds under network or memory pressure.
+- After a previously healthy MQTT session, repeated state -2 failures are tracked. Under clear local heap/TLS pressure, four failures schedule a network-stack self-heal; ordinary external broker/Internet failures use a more conservative threshold.
+- Self-heal closes BearSSL/TCP and the HTTP listener, briefly cycles station Wi-Fi, reapplies the saved/static network profile, and restarts MQTT + web services without rebooting the ESP or resetting energy accounting.
+- Network Debug reports the state -2 streak, network self-heal count and current MQTT update retry delay.
+- Existing v5.56 request coalescing, V5 history, DEH logic, meter health, unique MAC-based MQTT IDs, AP PIN, OTA and web safeguards remain in place.
+- All four firmware CI builds passed: DDS238/JSY-MK333 × SH1106/SSD1309.
+- Build source: `2918768beb1f320a6c5cdfe045ca7e3362122d77`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37942269782
 
-- V5 daily history begins with the first valid physical-meter reading; upgrading from 5.00 preserves existing LittleFS history, utility readings and credentials. Old days are not reconstructed.
-- Each day stores import/export separately for Z1 and the two Z2 windows. App charts and tables show Z1, Z2 midday, Z2 night, using import minus export, including negative balances.
-- Daily storage is bounded to 730 records of 80 bytes (58,400 bytes plus filesystem overhead). Current state uses two checksum-protected 112-byte banks, saved every 30 minutes and at transitions.
-- The existing 45-day, 30-minute checkpoint history is retained. Charts retrieve at most 16 rows per MQTT page; no full-history RAM buffer is allocated.
-- Partial days, uncertain gap allocation, physical counter resets and missing data are identified. Energy recovered after gaps longer than two hours is assigned to the return day and marked estimated.
-- Network debug reports LittleFS total/used/free bytes, current RAM/largest block and boot minima while MQTT is connected. The app shows a connected-MQTT snapshot when receiving history.
-- The daily ring preserves at least 400,000 bytes of flash headroom for existing checkpoint compaction and settings. Storage failures are reported; local meter operation continues.
-- Existing Wi-Fi/MQTT recovery, AP-only web PIN, credential persistence and five-second web updates are covered by regression tests.
-- Public binaries contain no Wi-Fi or MQTT login secrets. Broker host and port remain public defaults; saved credentials are read from LittleFS.
-- Four firmware CI builds and extracted-function history/network/HTTP/DEH tests passed. Runtime free space/heap on the actual device is measured after installation.
+## Manifests
 
-- Each ESP uses a stable MQTT device ID with its full station MAC, for example `jsy_house-AABBCCDDEEFF`. Identical binaries at different sites have independent state, health, requests, admin commands and OTA hostname. The MQTT client ID was already hardware-specific; the shared topic ID caused collisions.
-- A retained, small health message reports a missing/unresponsive physical DDS238 or JSY even when measurement publication is unavailable. It is sent on failure/recovery, MQTT reconnection and every 30 seconds. Failed physical reads do not advance energy history or counters.
-- The app distinguishes an online ESP from a failed meter, hides old live measurements while a meter error is active, and isolates parsing/rendering/request timeouts by device. A failing device cannot stop discovery and refresh of other devices.
-- App OTA timeout is three minutes. The app can confirm the firmware version from health without a physical sensor. First migration to a new MAC ID reports the newly detected ID without claiming a unique mapping from an old shared ID.
-- IMPORTANT for the first migration: if two pre-5.01 ESPs share one old ID, remote commands on that old topic cannot select one physical ESP. Upgrade with only one of those old-ID ESPs connected at a time, or use local upload. After both run 5.01, they remain separately addressable. Old retained legacy IDs are probed and stay hidden unless a live ESP replies. The app and firmware do not clear a topic that another old ESP might still use.
-- Successful app credentials are kept only in the current browser tab session and restored after reload; explicit disconnect or authentication rejection clears them. Browser password-manager entries are external to the app. New service-worker updates do not force navigation or reload of an active connection.
+- `manifest-jsy.txt`: JSY-MK333 + SSD1309.
+- `manifest-dds.txt`: DDS238 + SSD1309.
+- `manifest-jsy-sh1106.txt`: JSY-MK333 + SH1106.
+- `manifest-dds-sh1106.txt`: DDS238 + SH1106.
+- `manifest.txt`: JSY + SSD1309 compatibility alias.
 
-- App device actions are Settings, Charts, Update; Charts and Update share the accent background. Each chart bar displays its signed kWh value above it, including zero. Wide 7/30-day and hourly charts scroll horizontally with spacing based on number length.
-- Chart rendering reuses Intl formatters, calculates each displayed bar once and suppresses repeated zero axis lines. The app removes uncalled helpers and obsolete metric-card styles, uses one automatic refresh interval per connection, and avoids automatic requests when the same device already has a pending response.
-- Firmware removes unused write-only diagnostics and an obsolete reading comparator, shares the identical public network profile, and sizes each MQTT topic buffer from the selected profile, MAC and suffix. The MQTT client ID uses the full MAC-based device ID once; stable MQTT topics are retained across a 5.01 to 5.56 upgrade.
-- Validation includes DDS/JSY with SH1106/SSD1309, accounting/day/DST/utility regressions, sensor failure/recovery and two hardware IDs, AP/PIN/credential/reconnect/HTTP stress checks, PWA/session handling and actual browser desktop/mobile chart layout.
-
-Build source: `dd688de01dda29f728ccaf1fc947017d95a65285`.
-Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37692199113
-
-Manifests: `manifest-jsy.txt` and `manifest-dds.txt` target SSD1309; `manifest-jsy-sh1106.txt` and `manifest-dds-sh1106.txt` target SH1106. `manifest.txt` aliases JSY + SSD1309. Each lists exact filename, size and MD5. Previous binaries remain available.
-
-Publishing makes the firmware available to the app; it does not install it on devices.
-
+Every manifest contains the exact binary filename, byte size and MD5.
+Previous binaries remain available. Publishing these files does not install firmware on devices; updates start only when requested.
