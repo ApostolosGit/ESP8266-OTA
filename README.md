@@ -1,16 +1,16 @@
 # ESP8266 OTA
 
-Current firmware: **5.58**. App: **5.56**.
+Current firmware: **5.59**. App: **5.56**.
 
-- v5.58 is a documentation and safe-cleanup release on top of the v5.57 JSY MQTT/web stability fix.
-- The firmware now starts with an architecture overview and documents the actual setup/loop execution model, memory rules, V3/V5 storage-schema compatibility, and current DEH indication/measurement semantics.
-- Removed MQTT diagnostic variables that were written but never read, simplified an identical DDS/JSY MQTT buffer branch, and removed a normal-boot String allocation for IP formatting.
-- The MQTT low-memory publish guard is unchanged logically; its temporary heap values now stay local to the publish operation.
-- No MQTT topic, stored record layout, DEH behavior, history format, physical-meter register map or OTA protocol changed.
-- JSY SSD1309 build decreased from 596,772 to 596,736 program bytes and from 48,420 to 48,416 global RAM bytes versus v5.57.
+- v5.59 reorganizes the monolithic firmware into focused Arduino src/ modules while preserving executable behavior.
+- Main .ino now keeps configuration, shared state/types, setup() and loop().
+- Implementations are split into storage/accounting, DDS238 driver, JSY driver, MQTT, meter display, local web, utility/OTA and recovery/network modules.
+- The modules are header-only textual includes so the firmware remains a single translation unit; global ownership, persisted binary layouts, MQTT topics and meter behavior are unchanged.
+- CI includes a source-equivalence test proving the expanded v5.59 executable code matches v5.58 after normalizing only the version bump and required forward declaration.
+- Existing v5.57 long-run JSY MQTT/web self-heal and v5.58 cleanup remain unchanged.
 - All four firmware CI builds passed: DDS238/JSY-MK333 × SH1106/SSD1309.
-- Build source: `dc7fd0c6b01e25e0dc3852a80bebeef1676386be`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37948374271
+- Build source: `dcbcfa70fa64ca8e5be951a6f259d0777ff4d8e3`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37989126884
 
 ## Manifests
 

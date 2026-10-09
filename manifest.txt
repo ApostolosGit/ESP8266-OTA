@@ -1,10 +1,10 @@
-version=5.58
-file=EnergyMeter_JSY_MK333_SSD1309_Ver5_58.bin
+version=5.59
+file=EnergyMeter_JSY_MK333_SSD1309_Ver5_59.bin
 size=600896
-md5=4abafbca16424014bbc81c85926188f0
+md5=4b5fd30b02a70b7686ed9cf8adb0e57b
 meter=JSY-MK333
 oled=SSD1309
 core=ESP8266-2.7.2
 credentials=LittleFS-or-setup-portal
 transport=https-range
-build=dc7fd0c6b01e25e0dc3852a80bebeef1676386be
+build=dcbcfa70fa64ca8e5be951a6f259d0777ff4d8e3
