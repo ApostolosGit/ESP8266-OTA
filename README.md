@@ -1,17 +1,16 @@
 # ESP8266 OTA
 
-Current firmware: **5.57**. App: **5.56**.
+Current firmware: **5.58**. App: **5.56**.
 
-- v5.57 targets the long-run JSY case where router Wi-Fi remains associated but MQTT reaches state -2 and both MQTT access and the local HTTP page become unavailable.
-- The frequent MQTT update-request parser is now allocation-free, avoiding repeated Arduino String heap churn during app auto-refresh.
-- Failed state publications stay pending but retry with 5/10/30 second backoff instead of continuously retrying every 1.5 seconds under network or memory pressure.
-- After a previously healthy MQTT session, repeated state -2 failures are tracked. Under clear local heap/TLS pressure, four failures schedule a network-stack self-heal; ordinary external broker/Internet failures use a more conservative threshold.
-- Self-heal closes BearSSL/TCP and the HTTP listener, briefly cycles station Wi-Fi, reapplies the saved/static network profile, and restarts MQTT + web services without rebooting the ESP or resetting energy accounting.
-- Network Debug reports the state -2 streak, network self-heal count and current MQTT update retry delay.
-- Existing v5.56 request coalescing, V5 history, DEH logic, meter health, unique MAC-based MQTT IDs, AP PIN, OTA and web safeguards remain in place.
+- v5.58 is a documentation and safe-cleanup release on top of the v5.57 JSY MQTT/web stability fix.
+- The firmware now starts with an architecture overview and documents the actual setup/loop execution model, memory rules, V3/V5 storage-schema compatibility, and current DEH indication/measurement semantics.
+- Removed MQTT diagnostic variables that were written but never read, simplified an identical DDS/JSY MQTT buffer branch, and removed a normal-boot String allocation for IP formatting.
+- The MQTT low-memory publish guard is unchanged logically; its temporary heap values now stay local to the publish operation.
+- No MQTT topic, stored record layout, DEH behavior, history format, physical-meter register map or OTA protocol changed.
+- JSY SSD1309 build decreased from 596,772 to 596,736 program bytes and from 48,420 to 48,416 global RAM bytes versus v5.57.
 - All four firmware CI builds passed: DDS238/JSY-MK333 × SH1106/SSD1309.
-- Build source: `2918768beb1f320a6c5cdfe045ca7e3362122d77`.
-- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37942269782
+- Build source: `dc7fd0c6b01e25e0dc3852a80bebeef1676386be`.
+- Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37948374271
 
 ## Manifests
 
