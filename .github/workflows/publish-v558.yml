@@ -1,0 +1,148 @@
+name: Publish v5.58 OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v558.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DDS_SSD_URL: 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-79b4-81f4-b5f9-1b4a0fb695e1/raw?se=2026-10-09T15%3A06%3A59Z&sp=r&sv=2026-02-06&sr=b&scid=175e5219-ac5f-5ebd-a839-cd86391a5c87&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-09T01%3A20%3A00Z&ske=2026-10-10T01%3A20%3A00Z&sks=b&skv=2026-02-06&sig=4S0lLxnPLaIzseLNGVlhaJZyXpwc7l0f%2B8z/X0r2dpg%3D'
+      DDS_SH_URL: 'https://sdmntpritalynorth.oaiusercontent.com/files/00000000-71e8-8246-8d2e-f8d1a64a674c/raw?se=2026-10-09T15%3A06%3A59Z&sp=r&sv=2026-02-06&sr=b&scid=d0055d4c-58c4-514e-a5f0-f9030d84f12c&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-09T04%3A46%3A20Z&ske=2026-10-10T04%3A46%3A20Z&sks=b&skv=2026-02-06&sig=I4NtZzefoLavVJsLwWcfIxm//malZdPrN2b16TtbCbY%3D'
+      JSY_SSD_URL: 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-f498-81f4-988d-7ff60c96651f/raw?se=2026-10-09T15%3A07%3A00Z&sp=r&sv=2026-02-06&sr=b&scid=17a99812-06f9-519a-ae4e-dbcf62feaf15&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-09T04%3A24%3A44Z&ske=2026-10-10T04%3A24%3A44Z&sks=b&skv=2026-02-06&sig=Z/MZ8cFquCskxcGj/a0IOwiwLOOOty7YqI%2B17BxTE0g%3D'
+      JSY_SH_URL: 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-4a38-81f4-acfc-cb09c04b78c3/raw?se=2026-10-09T15%3A07%3A00Z&sp=r&sv=2026-02-06&sr=b&scid=f6daef17-cf2b-51ef-b094-2c1f5959deb7&skoid=d294dba5-36f7-432b-aab8-935656489847&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-09T02%3A53%3A01Z&ske=2026-10-10T02%3A53%3A01Z&sks=b&skv=2026-02-06&sig=9T%2BTr/b4ut8oprer4KapwjqC9arIkYAc/reU6xJgjaM%3D'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify four CI artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 "$DDS_SSD_URL" -o dds-ssd.zip
+          curl -fL --retry 3 --retry-delay 2 "$DDS_SH_URL" -o dds-sh.zip
+          curl -fL --retry 3 --retry-delay 2 "$JSY_SSD_URL" -o jsy-ssd.zip
+          curl -fL --retry 3 --retry-delay 2 "$JSY_SH_URL" -o jsy-sh.zip
+
+          echo "d272d533bf3c5910875674bf03dfebdd65f3dfa0e0af624accbe304c18b7e5f4  dds-ssd.zip" | sha256sum -c -
+          echo "2e0e1ba4a95550a8bec37e60b80072d05dc46b29790cde7c5d2525ace3102748  dds-sh.zip" | sha256sum -c -
+          echo "7a76d5e5b311df0a2e18adf62b9950dd6879f12441037bfb1f077af4269db883  jsy-ssd.zip" | sha256sum -c -
+          echo "a4e4d5f2a3f161e44dbd4886c73d7e65127816d57ca5a967ec4984de95519c77  jsy-sh.zip" | sha256sum -c -
+
+          for p in dds-ssd dds-sh jsy-ssd jsy-sh; do
+            mkdir -p "$p"
+            unzip -q "$p.zip" -d "$p"
+            test -f "$p/EnergyMeter_CI.ino.bin"
+          done
+
+          test "$(stat -c%s dds-ssd/EnergyMeter_CI.ino.bin)" = "595984"
+          test "$(stat -c%s dds-sh/EnergyMeter_CI.ino.bin)" = "596080"
+          test "$(stat -c%s jsy-ssd/EnergyMeter_CI.ino.bin)" = "600896"
+          test "$(stat -c%s jsy-sh/EnergyMeter_CI.ino.bin)" = "600976"
+
+          echo "29268084292dac02eddb763bfd7ea0c5  dds-ssd/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "c3684b5f38d6ae5d67332e0878d40ccb  dds-sh/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "4abafbca16424014bbc81c85926188f0  jsy-ssd/EnergyMeter_CI.ino.bin" | md5sum -c -
+          echo "cf80707cc79ade25660fb63680af2913  jsy-sh/EnergyMeter_CI.ino.bin" | md5sum -c -
+
+      - name: Publish v5.58 binaries and manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv dds-ssd/EnergyMeter_CI.ino.bin EnergyMeter_DDS238_SSD1309_Ver5_58.bin
+          mv dds-sh/EnergyMeter_CI.ino.bin EnergyMeter_DDS238_SH1106_Ver5_58.bin
+          mv jsy-ssd/EnergyMeter_CI.ino.bin EnergyMeter_JSY_MK333_SSD1309_Ver5_58.bin
+          mv jsy-sh/EnergyMeter_CI.ino.bin EnergyMeter_JSY_MK333_SH1106_Ver5_58.bin
+
+          cat > manifest-dds.txt <<'EOF'
+          version=5.58
+          file=EnergyMeter_DDS238_SSD1309_Ver5_58.bin
+          size=595984
+          md5=29268084292dac02eddb763bfd7ea0c5
+          meter=DDS238
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=dc7fd0c6b01e25e0dc3852a80bebeef1676386be
+          EOF
+
+          cat > manifest-dds-sh1106.txt <<'EOF'
+          version=5.58
+          file=EnergyMeter_DDS238_SH1106_Ver5_58.bin
+          size=596080
+          md5=c3684b5f38d6ae5d67332e0878d40ccb
+          meter=DDS238
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=dc7fd0c6b01e25e0dc3852a80bebeef1676386be
+          EOF
+
+          cat > manifest-jsy.txt <<'EOF'
+          version=5.58
+          file=EnergyMeter_JSY_MK333_SSD1309_Ver5_58.bin
+          size=600896
+          md5=4abafbca16424014bbc81c85926188f0
+          meter=JSY-MK333
+          oled=SSD1309
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=dc7fd0c6b01e25e0dc3852a80bebeef1676386be
+          EOF
+
+          cat > manifest-jsy-sh1106.txt <<'EOF'
+          version=5.58
+          file=EnergyMeter_JSY_MK333_SH1106_Ver5_58.bin
+          size=600976
+          md5=cf80707cc79ade25660fb63680af2913
+          meter=JSY-MK333
+          oled=SH1106
+          core=ESP8266-2.7.2
+          credentials=LittleFS-or-setup-portal
+          transport=https-range
+          build=dc7fd0c6b01e25e0dc3852a80bebeef1676386be
+          EOF
+
+          cp manifest-jsy.txt manifest.txt
+
+          cat > README.md <<'EOF'
+          # ESP8266 OTA
+
+          Current firmware: **5.58**. App: **5.56**.
+
+          - v5.58 is a documentation and safe-cleanup release on top of the v5.57 JSY MQTT/web stability fix.
+          - The firmware now starts with an architecture overview and documents the actual setup/loop execution model, memory rules, V3/V5 storage-schema compatibility, and current DEH indication/measurement semantics.
+          - Removed MQTT diagnostic variables that were written but never read, simplified an identical DDS/JSY MQTT buffer branch, and removed a normal-boot String allocation for IP formatting.
+          - The MQTT low-memory publish guard is unchanged logically; its temporary heap values now stay local to the publish operation.
+          - No MQTT topic, stored record layout, DEH behavior, history format, physical-meter register map or OTA protocol changed.
+          - JSY SSD1309 build decreased from 596,772 to 596,736 program bytes and from 48,420 to 48,416 global RAM bytes versus v5.57.
+          - All four firmware CI builds passed: DDS238/JSY-MK333 × SH1106/SSD1309.
+          - Build source: `dc7fd0c6b01e25e0dc3852a80bebeef1676386be`.
+          - Build run: https://github.com/ApostolosGit/ESP8266/actions/runs/37948374271
+
+          ## Manifests
+
+          - `manifest-jsy.txt`: JSY-MK333 + SSD1309.
+          - `manifest-dds.txt`: DDS238 + SSD1309.
+          - `manifest-jsy-sh1106.txt`: JSY-MK333 + SH1106.
+          - `manifest-dds-sh1106.txt`: DDS238 + SH1106.
+          - `manifest.txt`: JSY + SSD1309 compatibility alias.
+
+          Every manifest contains the exact binary filename, byte size and MD5.
+          Previous binaries remain available. Publishing these files does not install firmware on devices; updates start only when requested.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add             EnergyMeter_DDS238_SSD1309_Ver5_58.bin             EnergyMeter_DDS238_SH1106_Ver5_58.bin             EnergyMeter_JSY_MK333_SSD1309_Ver5_58.bin             EnergyMeter_JSY_MK333_SH1106_Ver5_58.bin             manifest-dds.txt manifest-dds-sh1106.txt             manifest-jsy.txt manifest-jsy-sh1106.txt manifest.txt README.md
+          git commit -m "Publish v5.58: documented and cleaned firmware"
+          git push
