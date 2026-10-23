@@ -22,3 +22,17 @@ Current firmware: **5.58**. App: **5.56**.
 
 Every manifest contains the exact binary filename, byte size and MD5.
 The v5.59 binaries remain only as historical files; manifests now point to v5.58.
+
+## Separate Ventilation firmware — TEST OTA only
+
+**Never flash Ventilation firmware to DDS238 or JSY meters, and never use EnergyMeter firmware on Ventilation.**
+
+- Ventilation manifest: `manifest-ventilation.txt` (requires `meter=VENTILATION`).
+- Ventilation binary: `Ventilation_ESP8266_V1_05.bin` — 542,960 bytes, firmware **1.05**.
+- EnergyMeter binaries retain their existing `EnergyMeter_DDS238_*` and `EnergyMeter_JSY_*` names and existing DDS/JSY manifests, without modification.
+- All manifests/binaries are in this repository root because the installed Ventilation v1.04 downloader has a **strict URL allowlist** requiring `https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA/main/Ventilation_ESP8266_V...bin`. Moving firmware into another folder would be rejected by that existing installed firmware.
+- Ventilation v1.05 is **TEST ONLY**; exact bytes copied from the private, compiled and checksum-verified [`ventilation-v1.05-test.16`](https://github.com/ApostolosGit/ESP8266-Ventilation/releases/tag/ventilation-v1.05-test.16). Not verified by an actual MQTT OTA on hardware.
+- MD5: `9dd7b939e0930dc68160a11a1b073e2e`.
+- SHA256: `935e6d6759b6677b1384617c2e4419f28f5be9c1f1bc2b9f320c3151b790eb5c`.
+- **No automatic remote installation.** The user must intentionally initiate and confirm OTA in MQTT.app, then provide their setup PIN.
+- **Hardware risk:** no USB access and no bootloader A/B rollback; OTA failure could lose access. Remote HTTPS OTA implementation has not been validated in the deployed environment. Do not flash on safety-critical powered loads unattended.
