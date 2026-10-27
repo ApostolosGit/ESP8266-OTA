@@ -1,44 +1,66 @@
 # ESP8266 OTA
 
-Current EnergyMeter firmware: **5.59**.
+Current EnergyMeter production firmware: **6.00**, for **SSD1309**.
 
-- v5.59 is the active EnergyMeter firmware release, built from [source commit `0c874d3`](https://github.com/ApostolosGit/ESP8266_EnergyMeter/commit/0c874d36207835b387a14d83a544d9016f882171).
-- The firmware remains one Arduino `.ino` file. This release removes write-only boot-memory diagnostics, redundant power-factor state, unused headers and obsolete build/test tooling.
-- MQTT topics, stored V3/V5 record layouts, DEH behavior, physical-meter registers and the HTTPS range OTA protocol remain compatible with v5.58.
-- All four local NodeMCU builds and all four current host-test commands passed before publication: DDS238/JSY-MK333 × SH1106/SSD1309, ESP8266 core 2.7.2.
-- Build source: `0c874d36207835b387a14d83a544d9016f882171`; firmware build date: `27/10/2026`.
-- The new binaries use the source-commit suffix `_0c874d3` to distinguish them from the historical, withdrawn v5.59 binaries and avoid reusing their download URLs.
+EnergyMeter 6.00 is the first application generated from
+`ESP8266_common_platform` 1.00. One firmware image includes the common services,
+EnergyMeter application, selected DDS238 or JSY-MK333 driver and SSD1309 display.
+Source: [ESP8266_EnergyMeter commit `f7b90a8`](https://github.com/ApostolosGit/ESP8266_EnergyMeter/commit/f7b90a85d92cf642d30038ed8937b5d97075165d),
+under `ESP8266_common_platform/`. Build date: **27/10/2026**.
 
-## Manifests
+The v5.58 accounting/storage formats and MQTT topics remain compatible. All six
+platform/application/display builds and all five host suites passed, including
+record-layout compatibility, offline/recovery behavior and OTA profile checks.
+**Installation on a physical device has not yet been verified.**
 
-- `manifest-jsy.txt`: JSY-MK333 + SSD1309.
-- `manifest-dds.txt`: DDS238 + SSD1309.
-- `manifest-jsy-sh1106.txt`: JSY-MK333 + SH1106.
-- `manifest-dds-sh1106.txt`: DDS238 + SH1106.
-- `manifest.txt`: JSY + SSD1309 compatibility alias.
+## Update from MQTT.app
 
-The current [app](https://github.com/ApostolosGit/dds238-app) selects
-`manifest-dds.txt` or `manifest-jsy.txt`, both for SSD1309. The SH1106 manifests
-are published separately for clients that explicitly select that display profile.
+Use [MQTT.app](https://apostolosgit.github.io/dds238-app/) **5.80 or newer**.
+Select the EnergyMeter device, check the available update, confirm the target
+and enter the existing PIN. The ESP8266 downloads the image directly over HTTPS,
+checks its size and MD5, writes firmware and restarts. Publication does not
+initiate installation on a device.
 
-Every EnergyMeter manifest contains version `5.59`, the exact binary filename,
-byte size and MD5, meter/OLED profile, core version and source build commit.
-The alias `manifest.txt` is byte-identical to `manifest-jsy.txt`.
+- An installed 5.58/5.59 uses its existing OTA command for the first transition.
+  Because that firmware does not report the display type, the app requires
+  explicit confirmation that the device has **SSD1309**.
+- Firmware 6.00 reports application, driver, display, profile, platform version
+  and OTA protocol. Subsequent app updates use the profile-checked v2 command;
+  incompatible profiles and the legacy OTA command are rejected by 6.00.
+- Success requires a fresh message from the same device reporting the expected
+  firmware and profile. The app displays update stages while MQTT is disconnected.
+
+## Manifests and images
+
+| Manifest | Target | Active version |
+| --- | --- | --- |
+| `manifest-dds.txt` | DDS238 + SSD1309 | **6.00** |
+| `manifest-jsy.txt` | JSY-MK333 + SSD1309 | **6.00** |
+| `manifest.txt` | Byte-identical alias of `manifest-jsy.txt` | **6.00** |
+| `manifest-dds-sh1106.txt` | Historical DDS238 + SH1106 | 5.59 |
+| `manifest-jsy-sh1106.txt` | Historical JSY-MK333 + SH1106 | 5.59 |
+
+Only the two SSD1309 EnergyMeter images are published for 6.00. Existing SH1106
+manifests and all historical binaries are retained unchanged. The platform-only
+and no-OLED validation images are not production OTA targets.
 
 | Profile | Binary | Bytes | MD5 |
 | --- | --- | ---: | --- |
-| DDS238 + SH1106 | `EnergyMeter_DDS238_SH1106_Ver5_59_0c874d3.bin` | 595712 | `4701d8addf73ca73caea68641f689258` |
-| DDS238 + SSD1309 | `EnergyMeter_DDS238_SSD1309_Ver5_59_0c874d3.bin` | 595632 | `8216f19b6ea96f8ae33586c00f20fe55` |
-| JSY-MK333 + SH1106 | `EnergyMeter_JSY_MK333_SH1106_Ver5_59_0c874d3.bin` | 600640 | `6497c71b3f08cf5ec7b0ebe3ba7829c6` |
-| JSY-MK333 + SSD1309 | `EnergyMeter_JSY_MK333_SSD1309_Ver5_59_0c874d3.bin` | 600544 | `d070ee94cb1c814bdb54bf3c9bf32b0b` |
+| DDS238 + SSD1309 | `EnergyMeter_DDS238_SSD1309_Ver6_00_f7b90a8.bin` | 596688 | `66c29a8cfb4a31f36bed34b45f53db27` |
+| JSY-MK333 + SSD1309 | `EnergyMeter_JSY_MK333_SSD1309_Ver6_00_f7b90a8.bin` | 601776 | `d4d4c77a076af929a0746e9ab6c2877d` |
 
-The original `_Ver5_59.bin` files remain historical and are not referenced by the
-active manifests. The v5.57/v5.58 files are retained for history.
+The 6.00 manifests include the exact binary size, MD5 and SHA256, generated
+source SHA256, source commit, core/credential/transport fields and the full
+application/driver/display profile. The `ota_protocol=2` field describes 6.00;
+legacy firmware can still install that image using its existing command.
+Binary filenames contain the source-commit suffix `f7b90a8` and do not
+reuse earlier release URLs.
 
-Run `python3 tests/verify_release.py` to check local profile routing, sizes and MD5.
-After publication, run `python3 tests/verify_release.py --remote` to verify the
-public manifests, full binary downloads and HTTP 206 byte-range responses used
-by the firmware updater. Actual device installation is initiated from the app.
+Run `python3 -m unittest discover -s tests -p 'test_verify_release.py'` for the
+verifier's rejection/range tests and `python3 tests/verify_release.py` for local
+manifests, profiles and image hashes. After publication,
+`python3 tests/verify_release.py --remote` also checks public manifest bytes,
+full binary downloads, and first/middle/final 4096-byte HTTP 206 ranges.
 
 ## Ventilation 1.08 — public OTA (compiled, hardware OTA unverified)
 
