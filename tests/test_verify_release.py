@@ -88,5 +88,86 @@ class ReleaseChecks(unittest.TestCase):
                     release.remote_bytes(*args)
 
 
+class VentilationChecks(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.image = b"\xe9" + bytes(range(256)) * 64
+        self.fields = {
+            "version": "2.00", "file": "Ventilation_ESP8266_V2_00.bin",
+            "size": str(len(self.image)), "md5": hashlib.md5(self.image).hexdigest(),
+            "sha256": hashlib.sha256(self.image).hexdigest(),
+            "meter": "VENTILATION", "application": "ventilation",
+            "platform_version": "1.01", "driver": "DS18B20-DHT11", "oled": "NONE",
+            "profile": release.VENTILATION_PROFILE, "ota_protocol": "2",
+            "core": "ESP8266-2.7.2", "transport": "https-range",
+            "credentials": "LittleFS-migration-or-setup-portal", "build": "c" * 40,
+            "source_sha256": "d" * 64, "hardware_validation": "UNVERIFIED",
+            "requires": "Ventilation-1.04+", "local_ip": "192.168.1.81",
+        }
+        (self.root / self.fields["file"]).write_bytes(self.image)
+
+    def manifest(self):
+        return ("\n".join(f"{key}={value}" for key, value in self.fields.items()) + "\n").encode()
+
+    def validate(self):
+        with patch.object(release, "ROOT", self.root):
+            return release.validate_ventilation_manifest(self.manifest())
+
+    def test_matching_ventilation_profile(self):
+        fields, image = self.validate()
+        self.assertEqual(fields, self.fields)
+        self.assertEqual(image, self.image)
+
+    def test_wrong_application_display_driver_and_metadata_rejected(self):
+        for key, value in (("version", "1.08"), ("meter", "DDS238"),
+                           ("application", "energymeter"), ("driver", "DDS238"),
+                           ("oled", "SSD1309"), ("profile", "ventilation-none"),
+                           ("ota_protocol", "1"), ("local_ip", "192.168.1.80"),
+                           ("source_sha256", "invalid"), ("build", "pending"),
+                           ("hardware_validation", "VERIFIED")):
+            with self.subTest(key=key):
+                previous = self.fields[key]
+                self.fields[key] = value
+                with self.assertRaises(AssertionError):
+                    self.validate()
+                self.fields[key] = previous
+
+    def test_legacy_filename_and_corrupt_bytes_rejected(self):
+        previous = self.fields["file"]
+        self.fields["file"] = "Ventilation_ESP8266_V2_00_source.bin"
+        with self.assertRaisesRegex(AssertionError, "allowlist"):
+            self.validate()
+        self.fields["file"] = previous
+        path = self.root / previous
+        path.write_bytes(self.image[:-1])
+        with self.assertRaisesRegex(AssertionError, "size"):
+            self.validate()
+        path.write_bytes(self.image[:-1] + b"x")
+        with self.assertRaisesRegex(AssertionError, "MD5"):
+            self.validate()
+
+    def test_remote_check_covers_full_image_and_first_middle_final_ranges(self):
+        content = self.manifest()
+        observed = []
+
+        def download(path, nonce, byte_range=None, total_size=None):
+            observed.append((path, byte_range, total_size))
+            if path == "manifest-ventilation.txt":
+                return content
+            if byte_range is None:
+                return self.image
+            start, end = byte_range
+            return self.image[start:end + 1]
+
+        with patch.object(release, "remote_bytes", side_effect=download):
+            release.verify_remote_image("manifest-ventilation.txt", content, self.fields, self.image)
+        spans = [item[1] for item in observed if item[1] is not None]
+        length = len(self.image)
+        self.assertEqual(spans, [(0, 4095), ((length - 4096) // 2, (length - 4096) // 2 + 4095),
+                                 (length - 4096, length - 1)])
+
+
 if __name__ == "__main__":
     unittest.main()

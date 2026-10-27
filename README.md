@@ -62,20 +62,47 @@ manifests, profiles and image hashes. After publication,
 `python3 tests/verify_release.py --remote` also checks public manifest bytes,
 full binary downloads, and first/middle/final 4096-byte HTTP 206 ranges.
 
-## Ventilation 1.08 — public OTA (compiled, hardware OTA unverified)
+## Ventilation 2.00 — common platform, no OLED
 
-The newest public Ventilation application-only OTA file is [Ventilation_ESP8266_V1_08.bin](./Ventilation_ESP8266_V1_08.bin), 557,280 bytes (MD5 `6b52618d7c1d69b5dce12156f45ff050`; SHA256 `7d79f4bdd12489e3dbb521cd09c379876b2287fe1d085cb99394a2521d994391`). The public [manifest-ventilation.txt](./manifest-ventilation.txt) now points to **1.08** for normal opt-in MQTT.app OTA checks. Source: [Ventilation 1.08 private compiled release](https://github.com/ApostolosGit/ESP8266-Ventilation/releases/tag/ventilation-v1.08-test.27).
+The public [manifest-ventilation.txt](./manifest-ventilation.txt) selects
+[Ventilation_ESP8266_V2_00.bin](./Ventilation_ESP8266_V2_00.bin), **581,120 bytes**,
+MD5 `cc1a5195bb81ddc586d8a501c687d73d`,
+SHA256 `8ce9ba722cefe043631cfdf772bc07e31765dcf9572d999d59b7d729079b75f9`.
+Source: [Ventilation application and common platform, commit `2723418`](https://github.com/ApostolosGit/ESP8266_EnergyMeter/tree/27234185ad18d3b0aa7264ca6ae5b5f6fb1c5420/ESP8266_common_platform).
+The manifest records the exact source commit and generated-source SHA256.
 
-Network Debug, Network Setup with credential retention, Wi-Fi/MQTT/RSSI/heap status, and confirmed OTA-only Recovery follow the EnergyMeter ESP8266 v5.58 model. Ventilation STA and recovery AP are **192.168.1.81**; EnergyMeter ESP8266 is **192.168.1.80**; Boiler ESP32-C3 is **192.168.1.82**. The fan is forced OFF during OTA-only Recovery.
+Ventilation 2.00 combines **ESP8266_common_platform 1.01** with the sensors,
+fan/speed controls, schedules and 24h/48h/30-day history from the supplied
+Ventilation 1.07 source. This application has **no OLED**. Both its local LAN
+page and setup/recovery AP use **192.168.1.81**; the old credential record is
+validated and migrated, and existing history A/B formats remain compatible.
+The fan remains OFF during OTA and Recovery.
 
-**Important:** Published as an opt-in OTA version after reproducible compilation and SHA/MD5 verification, **NOT** validated by a live MQTT OTA update or installed ventilation hardware. Do not initiate OTA unattended, with unsafe operating conditions, or without a tested on-site recovery path. Existing relay behavior has not been physically retested. No background or automatic device update is initiated by this repository commit. TLS authenticity remains unverified in the deployed firmware; MD5 alone is not a security signature.
+Use [MQTT.app](https://apostolosgit.github.io/dds238-app/) **5.81 or newer**:
+select Ventilation, confirm the offered 2.00 update and enter the existing PIN.
+Installed **1.04–1.xx** uses the existing PIN-protected legacy OTA command for
+this first migration. Devices already running **2.xx** use the common
+profile-checked `ota_https_v2` command. Its exact profile is
+`ventilation-3ds18b20-2dht11-none`; incompatible application/display/driver
+profiles are rejected before installation.
+
+The app waits for a fresh, non-retained health message from the same device
+reporting the expected version and profile after the OTA disconnection.
+Publication does not start an installation. The binary, profile, hashes and
+range downloads were checked in software; a live hardware OTA installation
+has not been performed.
+
+The existing EnergyMeter manifests and all earlier binaries remain unchanged.
+`python3 tests/verify_release.py --remote` verifies both EnergyMeter and
+Ventilation, including complete image bytes and first/middle/final 4096-byte
+HTTP 206 ranges.
 
 ## Separate Ventilation firmware — historical OTA test information
 
 **Never flash Ventilation firmware to DDS238 or JSY meters, and never use EnergyMeter firmware on Ventilation.**
 
 - Ventilation manifest: `manifest-ventilation.txt` (requires `meter=VENTILATION`).
-- Historical Ventilation binary: `Ventilation_ESP8266_V1_05.bin` — 542,960 bytes, firmware **1.05**. The active manifest now points to v1.08.
+- Historical Ventilation binaries: `Ventilation_ESP8266_V1_05.bin` — 542,960 bytes, firmware **1.05**, and `Ventilation_ESP8266_V1_08.bin` — 557,280 bytes, firmware **1.08**. The active manifest now points to **2.00**.
 - EnergyMeter binaries retain their existing `EnergyMeter_DDS238_*` and `EnergyMeter_JSY_*` names and existing DDS/JSY manifests, without modification.
 - All manifests/binaries are in this repository root because the installed Ventilation v1.04 downloader has a **strict URL allowlist** requiring `https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA/main/Ventilation_ESP8266_V...bin`. Moving firmware into another folder would be rejected by that existing installed firmware.
 - Ventilation v1.05 is **TEST ONLY**; exact bytes copied from the private, compiled and checksum-verified [`ventilation-v1.05-test.16`](https://github.com/ApostolosGit/ESP8266-Ventilation/releases/tag/ventilation-v1.05-test.16). Not verified by an actual MQTT OTA on hardware.
