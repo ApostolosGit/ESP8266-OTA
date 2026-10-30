@@ -123,11 +123,40 @@ jobs:
           set -euo pipefail
           mkdir -p ci_sketch/Ventilation_CI stage build
           cp private-src/Ventilation_ESP8266_V2_03.ino ci_sketch/Ventilation_CI/Ventilation_CI.ino
-          arduino-cli compile \
+          # Arduino IDE's auto-prototype pass places the checksum function's
+          # generated prototype before LegacyVentCredentialRecord is defined.
+          # Declare only the type in the build copy; never edit private source.
+          python3 - <<'PY'
+          from pathlib import Path
+          sketch = Path("ci_sketch/Ventilation_CI/Ventilation_CI.ino")
+          s = sketch.read_text()
+          anchor = "struct DeviceCredentialRecord;\n"
+          declaration = "struct LegacyVentCredentialRecord;\n"
+          if declaration not in s:
+              if s.count(anchor) != 1:
+                  raise SystemExit("Cannot safely insert ESP8266 Arduino forward declaration")
+              s = s.replace(anchor, anchor + declaration, 1)
+              sketch.write_text(s)
+          print("Arduino auto-prototype compatibility declaration: OK")
+          PY
+          # Public workflow logs must not expose private .ino snippets on errors.
+          # Preserve the compiler transcript only in the ephemeral runner.
+          if ! arduino-cli compile \
             --fqbn esp8266:esp8266:nodemcuv2 \
-            --warnings all \
             --output-dir build \
-            ci_sketch/Ventilation_CI
+            ci_sketch/Ventilation_CI > "$RUNNER_TEMP/ventilation-v203-compile.log" 2>&1; then
+            python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          log = (Path(os.environ["RUNNER_TEMP"]) / "ventilation-v203-compile.log").read_text(errors="replace")
+          numbers = sorted({int(n) for n in re.findall(r"\\.ino:(\\d+):\\d+: error:", log)})
+          if numbers:
+              print("Compile failed at sketch line(s): " + ", ".join(map(str, numbers)))
+          else:
+              print("Compile failed; raw diagnostics hidden to protect private source.")
+          PY
+            exit 1
+          fi
           test -s build/Ventilation_CI.ino.bin
           cp build/Ventilation_CI.ino.bin stage/Ventilation_ESP8266_V2_03_TEST_ONLY.bin
           git -C private-src rev-parse HEAD > stage/SOURCE_COMMIT.txt
