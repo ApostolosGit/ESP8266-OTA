@@ -72,24 +72,24 @@ jobs:
               raise SystemExit('BLOCKED: compiled image differs from successful v7.01 TEST candidate')
           source=Path('src/Ventilation/ESP8266_ventilation_v7.01.ino').read_bytes()
           manifest=(
-             'version=7.01\\n'
-             'file=Ventilation_ESP8266_V7_01.bin\\n'
-             f'size={len(b)}\\n'
-             f'md5={hashlib.md5(b).hexdigest()}\\n'
-             'meter=VENTILATION\\n'
-             'oled=NONE\\n'
-             'core=ESP8266-2.7.2\\n'
-             'channel=PUBLIC_OTA\\n'
-             'hardware_validation=UNVERIFIED\\n'
-             f'sha256={hashlib.sha256(b).hexdigest()}\\n'
-             f'source_sha256={hashlib.sha256(source).hexdigest()}\\n'
-             'application=ventilation\\n'
-             'platform_version=1.05\\n'
-             'driver=DS18B20-DHT11\\n'
-             'profile=ventilation-3ds18b20-2dht11-none\\n'
-             'ota_protocol=2\\n'
-             'transport=https-range\\n'
-             'credentials=LittleFS-or-setup-portal\\n'
+             'version=7.01\n'
+             'file=Ventilation_ESP8266_V7_01.bin\n'
+             f'size={len(b)}\n'
+             f'md5={hashlib.md5(b).hexdigest()}\n'
+             'meter=VENTILATION\n'
+             'oled=NONE\n'
+             'core=ESP8266-2.7.2\n'
+             'channel=PUBLIC_OTA\n'
+             'hardware_validation=UNVERIFIED\n'
+             f'sha256={hashlib.sha256(b).hexdigest()}\n'
+             f'source_sha256={hashlib.sha256(source).hexdigest()}\n'
+             'application=ventilation\n'
+             'platform_version=1.05\n'
+             'driver=DS18B20-DHT11\n'
+             'profile=ventilation-3ds18b20-2dht11-none\n'
+             'ota_protocol=2\n'
+             'transport=https-range\n'
+             'credentials=LittleFS-or-setup-portal\n'
           )
           Path('output/manifest-ventilation.txt').write_text(manifest)
           print('TEST image bytes',len(b),'SHA256',hashlib.sha256(b).hexdigest())
@@ -103,7 +103,7 @@ jobs:
           import re,hashlib
           manifest=dict(line.split('=',1) for line in Path('output/manifest-ventilation.txt').read_text().splitlines())
           b=Path('output',manifest['file']).read_bytes()
-          match=re.fullmatch(r'Ventilation_ESP8266_V(\\d+)_(\\d{1,2})\\.bin',manifest['file'])
+          match=re.fullmatch(r'Ventilation_ESP8266_V(\d+)_(\d{1,2})\.bin',manifest['file'])
           assert match and manifest['version']==f'{int(match.group(1))}.{match.group(2)}'
           assert manifest['version']=='7.01'
           assert len(b)==int(manifest['size'])
