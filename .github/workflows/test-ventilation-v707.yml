@@ -72,7 +72,7 @@ jobs:
               marker=name+' {'
               if text.count(marker)<1: raise SystemExit('Function not found: '+name)
               tail=text[text.index(marker):]
-              end=tail.index('\\n}\\n')
+              end=tail.index('\n}\n')
               return tail[:end+2]
           for routine in (
               'void applicationPrepareOta()', 'void applicationServiceLocal(unsigned long now)',
