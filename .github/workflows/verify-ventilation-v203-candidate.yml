@@ -26,6 +26,7 @@ jobs:
           import re
           import urllib.error
           import urllib.request
+          import urllib.parse
 
           base = (
               "https://github.com/ApostolosGit/ESP8266-OTA.bin/releases/download/"
@@ -68,7 +69,7 @@ jobs:
 
           binary, full_redirects, full_host = fetch(filename)
           assert len(binary) == expected_size, f"Unexpected image length: {len(binary)}"
-          assert binary[:1] == b"\\xe9", "Missing ESP8266 application image header"
+          assert binary[:1] == bytes([0xe9]), "Missing ESP8266 application image header"
 
           sha_text = fetch("SHA256SUMS.txt")[0].decode("ascii").strip()
           md5_text = fetch("MD5SUMS.txt")[0].decode("ascii").strip()
