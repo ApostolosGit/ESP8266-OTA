@@ -1,0 +1,100 @@
+name: Ventilation v7.06 TEST-only recovery candidate
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/test-ventilation-v706.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned v7.06 source
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: e0f0940dcf4f0004feb9dd0ef57b9fa52ee59882
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino ESP8266 core and public libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "DHT sensor library"
+          git clone --quiet --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$HOME/Arduino/libraries/DHTesp"
+      - name: Compile and verify TEST-only firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/Ventilation_CI output
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('src/Ventilation/ESP8266_ventilation_v7.06.ino').read_text()
+          for invariant in ('#define VERSION "7.06"','#define PLATFORM_VERSION "1.04"',
+                            '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
+                            '#define OTA_PROFILE_PREFIX "ventilation-3ds18b20-2dht11"',
+                            '#define OLED_TYPE 0','#define SITE_IP_D 81',
+                            '#define PLATFORM_WEB_MIN_HEAP_BYTES 2048UL',
+                            'const uint32_t WEB_ROOT_MIN_HEAP_BYTES = 1024UL;',
+                            'void applicationPrepareOta()', 'applicationEarlyInitialize();'):
+              if invariant not in s:
+                  raise SystemExit('Missing v7.06 source invariant')
+          # EXACT functional diff: only 4s to 10s; version identifies OTA build.
+          baseline=Path('src/Ventilation/ESP8266_ventilation_v7.05.ino').read_text()
+          version_old='#define VERSION "7.05"'
+          version_new='#define VERSION "7.06"'
+          timeout_old='const unsigned long WEB_RESPONSE_BUDGET_MS = 4000UL;'
+          timeout_new='const unsigned long WEB_RESPONSE_BUDGET_MS = 10000UL;'
+          if baseline.count(version_old)!=1 or baseline.count(timeout_old)!=1 or s.count(version_new)!=1 or s.count(timeout_new)!=1:
+              raise SystemExit('Expected one version + timeout target')
+          if s.replace(version_new,version_old).replace(timeout_new,timeout_old)!=baseline:
+              raise SystemExit('BLOCKED: v7.06 differs from v7.05 beyond the requested 4s-to-10s change and version')
+          if '#define PLATFORM_VERSION "1.04"' not in s or '#define OTA_PROTOCOL_VERSION 2' not in s:
+              raise SystemExit('Original CommonPlatform and OTA profile must be retained')
+          for feature in ('FAN_ON_LEVEL=HIGH, FAN_OFF_LEVEL=LOW', 'void applicationPrepareOta()',
+                          'void handleRoot()', 'maintainMqtt(now)'):
+              if feature not in s: raise SystemExit('Missing original fan/MQTT feature: '+feature)
+          anchor='struct DeviceCredentialRecord;'
+          if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
+          s=s.replace(anchor,anchor+'\nstruct LegacyVentCredentialRecord;',1)
+          Path('ci/Ventilation_CI/Ventilation_CI.ino').write_text(s)
+          PY
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir output ci/Ventilation_CI
+          test -s output/Ventilation_CI.ino.bin
+          mv output/Ventilation_CI.ino.bin output/Ventilation_ESP8266_V7_06_TEST_ONLY.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('output/Ventilation_ESP8266_V7_06_TEST_ONLY.bin')
+          b=p.read_bytes()
+          if b[:1]!=b'\xe9' or not 65536<len(b)<1500000:raise SystemExit('Invalid ESP8266 application image')
+          (Path('output/TEST_CANDIDATE_README.txt')).write_text(
+             'Ventilation 7.06 / CommonPlatform 1.04 - TEST ONLY\n'
+             'Exact Ventilation v2.03 source, with only VERSION changed to 7.06.\n'
+             'Hardware validation: NOT DONE. Never automatically OTA-promote.\n'
+             'Previous production Ventilation OTA manifest is unchanged.\n'
+             'sha256='+hashlib.sha256(b).hexdigest()+'\n'
+             'md5='+hashlib.md5(b).hexdigest()+'\n'
+             'size='+str(len(b))+'\n')
+          print('TEST image bytes',len(b),'SHA256',hashlib.sha256(b).hexdigest())
+          PY
+      - name: Store TEST candidate (not production OTA, not a GitHub release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ventilation-v7.06-TEST-ONLY
+          path: |
+            output/Ventilation_ESP8266_V7_06_TEST_ONLY.bin
+            output/TEST_CANDIDATE_README.txt
+          retention-days: 14
