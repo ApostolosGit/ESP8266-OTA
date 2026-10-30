@@ -1,0 +1,93 @@
+name: Check Ventilation V2.03 public OTA candidate
+
+# One-time check when first added. Can also be re-run by the owner on demand.
+# This NEVER flashes a device, changes a manifest or publishes a BIN.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-ventilation-v203-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Download, checksums and HTTP 206 ranges
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify GitHub release candidate without flashing hardware
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import re
+          import urllib.error
+          import urllib.request
+          import urllib.parse
+
+          base = (
+              "https://github.com/ApostolosGit/ESP8266-OTA.bin/releases/download/"
+              "ventilation-v2.03-test-41081881950-1/"
+          )
+          filename = "Ventilation_ESP8266_V2_03_TEST_ONLY.bin"
+          expected_size = 587952
+          redirects = []
+          class RedirectChecker(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  redirects.append(code)
+                  if len(redirects) > 3:
+                      raise RuntimeError("More than three HTTP redirects (firmware limit)")
+                  return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+          opener = urllib.request.build_opener(RedirectChecker())
+          def fetch(name, byte_range=None):
+              redirects.clear()
+              headers = {"User-Agent": "Ventilation-v203-ota-validator/1.0"}
+              if byte_range is not None:
+                  start, end = byte_range
+                  headers["Range"] = f"bytes={start}-{end}"
+              request = urllib.request.Request(base + name, headers=headers)
+              with opener.open(request, timeout=30) as response:
+                  body = response.read()
+                  status = response.status
+                  range_header = response.headers.get("Content-Range", "")
+                  final_host = urllib.parse.urlparse(response.url).hostname
+              if byte_range is not None:
+                  if status != 206:
+                      raise AssertionError(f"Expected HTTP 206; got {status} from {final_host}")
+                  expected_header = f"bytes {start}-{end}/{expected_size}"
+                  if range_header != expected_header:
+                      raise AssertionError(f"Wrong Content-Range: {range_header!r}, expected {expected_header!r}")
+                  if len(body) != end - start + 1:
+                      raise AssertionError(f"Wrong partial length {len(body)}")
+              elif status != 200:
+                  raise AssertionError(f"Expected HTTP 200; got {status}")
+              return body, len(redirects), final_host
+
+          binary, full_redirects, full_host = fetch(filename)
+          assert len(binary) == expected_size, f"Unexpected image length: {len(binary)}"
+          assert binary[:1] == bytes([0xe9]), "Missing ESP8266 application image header"
+
+          sha_text = fetch("SHA256SUMS.txt")[0].decode("ascii").strip()
+          md5_text = fetch("MD5SUMS.txt")[0].decode("ascii").strip()
+          for label, checksum_text, actual in (
+              ("SHA256", sha_text, hashlib.sha256(binary).hexdigest()),
+              ("MD5", md5_text, hashlib.md5(binary).hexdigest()),
+          ):
+              match = re.fullmatch(r"([0-9a-f]+)  " + re.escape(filename), checksum_text)
+              if not match or match.group(1) != actual:
+                  raise AssertionError(f"{label} release checksum mismatch")
+              print(f"{label} matches {actual}")
+
+          parts = [(0, 4095), (expected_size - 4096, expected_size - 1)]
+          for start, end in parts:
+              partial, redirects_used, host = fetch(filename, (start, end))
+              assert partial == binary[start:end + 1], "Returned HTTP range bytes do not match release BIN"
+              print(f"HTTP 206 bytes={start}-{end}, {len(partial)} bytes, {redirects_used} redirect(s), host={host}")
+
+          print(f"Release BIN OK: {expected_size} bytes; full download redirects={full_redirects}; host={full_host}")
+          print("PASS: cloud download / HTTP range / hash checks. Does not certify installed ESP8266 OTA or GPIO safety.")
+          PY
