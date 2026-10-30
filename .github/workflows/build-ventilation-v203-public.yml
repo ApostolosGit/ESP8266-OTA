@@ -149,7 +149,7 @@ jobs:
           import os, re
           from pathlib import Path
           log = (Path(os.environ["RUNNER_TEMP"]) / "ventilation-v203-compile.log").read_text(errors="replace")
-          numbers = sorted({int(n) for n in re.findall(r"\\.ino:(\\d+):\\d+: error:", log)})
+          numbers = sorted({int(n) for n in re.findall(r"\.ino:(\d+):\d+: error:", log)})
           if numbers:
               print("Compile failed at sketch line(s): " + ", ".join(map(str, numbers)))
           else:
