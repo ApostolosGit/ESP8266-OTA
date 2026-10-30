@@ -15,7 +15,7 @@ PROFILES = {
     "manifest-jsy-sh1106.txt": ("JSY-MK333", "SH1106"),
 }
 ACTIVE_VERSION = "6.00"
-VENTILATION_VERSION = "2.03"
+VENTILATION_VERSION = "2.04"
 VENTILATION_PROFILE = "ventilation-3ds18b20-2dht11-none"
 HISTORICAL_MANIFEST_SHA256 = {
     "manifest-dds-sh1106.txt": "ecf1b3f12587383008e100ea3676ee45c4ff3f66e3006a60d40cd8d15cd41fa2",
@@ -87,7 +87,7 @@ def validate_manifest(manifest, content):
 def validate_ventilation_manifest(content):
     fields = parse_manifest(content)
     assert fields["version"] == VENTILATION_VERSION
-    assert fields["file"] == "Ventilation_ESP8266_V2_03.bin", "Legacy Ventilation URL allowlist requires the exact versioned filename"
+    assert fields["file"] == "Ventilation_ESP8266_V2_04.bin", "Legacy Ventilation URL allowlist requires the exact versioned filename"
     for key, expected in {
         "meter": "VENTILATION", "application": "ventilation",
         "platform_version": "1.04", "driver": "DS18B20-DHT11",
