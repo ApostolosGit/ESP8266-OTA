@@ -2,7 +2,7 @@ name: Ventilation v7.05 TEST-only recovery candidate
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/test-ventilation-v703.yml']
+    paths: ['.github/workflows/test-ventilation-v705.yml']
   workflow_dispatch:
 permissions:
   contents: read
