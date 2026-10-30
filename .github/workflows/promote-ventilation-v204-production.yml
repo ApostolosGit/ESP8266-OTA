@@ -1,0 +1,118 @@
+name: Promote Ventilation V2.04 production OTA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-ventilation-v204-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+concurrency:
+  group: ventilation-v204-production-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.repository == 'ApostolosGit/ESP8266-OTA.bin' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout public repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Checkout pinned private V2.04 source without persisting credentials
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266-Ventilation
+          ref: 584d352253ed3687633e4fdffbde94ea56d843f3
+          token: ${{ secrets.VENTILATION_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            Ventilation_ESP8266_V2_04.ino
+          sparse-checkout-cone-mode: false
+          path: .private-source
+      - name: Download and check exact verified public test image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ota-promotion-stage
+          gh release download ventilation-v2.04-test-41093685314-1 --repo "$GITHUB_REPOSITORY" --dir .ota-promotion-stage \
+            --pattern 'Ventilation_ESP8266_V2_04_TEST_ONLY.bin' \
+            --pattern 'SOURCE_COMMIT.txt' --pattern 'SHA256SUMS.txt' --pattern 'MD5SUMS.txt'
+          (cd .ota-promotion-stage && sha256sum -c SHA256SUMS.txt && md5sum -c MD5SUMS.txt)
+      - name: Atomically prepare new BIN manifest and validator
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, re
+          from pathlib import Path
+          stage=Path(".ota-promotion-stage")
+          src=stage/"Ventilation_ESP8266_V2_04_TEST_ONLY.bin"
+          data=src.read_bytes()
+          sha="34648d70cd6845896018ace23280073319c9c7550bbc6a1c0e940cd38dfa71e3"
+          assert len(data)==588560 and data[:1]==bytes([0xe9])
+          assert hashlib.sha256(data).hexdigest()==sha
+          md5=hashlib.md5(data).hexdigest()
+          commit=(stage/"SOURCE_COMMIT.txt").read_text().strip()
+          assert commit=="584d352253ed3687633e4fdffbde94ea56d843f3"
+          private=Path(".private-source/Ventilation_ESP8266_V2_04.ino").read_bytes()
+          assert b'#define VERSION "2.04"' in private
+          assert b'#define PLATFORM_VERSION "1.04"' in private
+          assert b'server.on("/restart-esp", HTTP_POST, handleRestartEspFromWeb)' in private
+          source_sha=hashlib.sha256(private).hexdigest()
+          dest=Path("Ventilation_ESP8266_V2_04.bin")
+          if dest.exists() and dest.read_bytes()!=data: raise SystemExit("Existing V2.04 BIN differs")
+          dest.write_bytes(data)
+          manifest=Path("manifest-ventilation.txt")
+          fields=dict(line.split("=",1) for line in manifest.read_text().splitlines())
+          assert fields["version"] in ("2.03","2.04")
+          for key,value in {"meter":"VENTILATION","application":"ventilation","driver":"DS18B20-DHT11",
+            "oled":"NONE","profile":"ventilation-3ds18b20-2dht11-none","ota_protocol":"2",
+            "platform_version":"1.04","core":"ESP8266-2.7.2","transport":"https-range",
+            "hardware_validation":"UNVERIFIED","local_ip":"192.168.1.81"}.items():
+              assert fields[key]==value,(key,fields[key])
+          fields.update(version="2.04",file=dest.name,size=str(len(data)),md5=md5,
+            sha256=sha,build=commit,source_sha256=source_sha)
+          manifest.write_text("".join(f"{k}={v}\n" for k,v in fields.items()))
+          validator=Path("tests/verify_release.py")
+          script=validator.read_text()
+          for old,new in [('VENTILATION_VERSION = "2.03"','VENTILATION_VERSION = "2.04"'),
+             ('fields["file"] == "Ventilation_ESP8266_V2_03.bin"','fields["file"] == "Ventilation_ESP8266_V2_04.bin"')]:
+            assert script.count(old)==1,old
+            script=script.replace(old,new)
+          validator.write_text(script)
+          print("Staged verified V2.04:",len(data),"bytes; hardware_validation=UNVERIFIED")
+          PY
+      - name: Validate all OTA profiles locally
+        run: python3 tests/verify_release.py
+      - name: Commit production BIN manifest and validator together
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Ventilation_ESP8266_V2_04.bin manifest-ventilation.txt tests/verify_release.py
+          if ! git diff --staged --quiet; then
+            git commit -m "release: promote verified Ventilation V2.04 OTA BIN and manifest"
+            git push origin HEAD:main
+          fi
+      - name: Verify public production binary and 206 byte ranges
+        run: python3 tests/verify_release.py --remote
+      - name: Publish non-prerelease production V2.04
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=ventilation-v2.04
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Production release already exists."
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target main \
+              --title "Ventilation ESP8266 V2.04 - Production OTA" \
+              --notes "Promoted unchanged checksum-verified V2.04 TEST BIN after public CDN and range checks. hardware_validation=UNVERIFIED; no physical relay/recovery validation or OTA installation performed. Do not deploy unattended." \
+              Ventilation_ESP8266_V2_04.bin
+          fi
