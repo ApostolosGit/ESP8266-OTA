@@ -1,0 +1,85 @@
+name: Ventilation v7.01 TEST-only recovery candidate
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/test-ventilation-v701.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned v7.01 source
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: dd6ef543fc9d6c7a6ee7fa9c8fcd1e9f33289650
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino ESP8266 core and public libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "DHT sensor library"
+          git clone --quiet --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$HOME/Arduino/libraries/DHTesp"
+      - name: Compile and verify TEST-only firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/Ventilation_CI output
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('src/Ventilation/ESP8266_ventilation_v7.01.ino').read_text()
+          for invariant in ('#define VERSION "7.01"','#define PLATFORM_VERSION "1.05"',
+                            '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
+                            '#define OTA_PROFILE_PREFIX "ventilation-3ds18b20-2dht11"',
+                            '#define OLED_TYPE 0','#define SITE_IP_D 81',
+                            '#define PLATFORM_WEB_MIN_HEAP_BYTES 8192UL',
+                            'const uint32_t WEB_ROOT_MIN_HEAP_BYTES = 8192UL;',
+                            'void applicationPrepareOta()', 'applicationEarlyInitialize();'):
+              if invariant not in s:
+                  raise SystemExit('Missing v7.01 source invariant')
+          anchor='struct DeviceCredentialRecord;'
+          if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
+          s=s.replace(anchor,anchor+'\nstruct LegacyVentCredentialRecord;',1)
+          Path('ci/Ventilation_CI/Ventilation_CI.ino').write_text(s)
+          PY
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir output ci/Ventilation_CI
+          test -s output/Ventilation_CI.ino.bin
+          mv output/Ventilation_CI.ino.bin output/Ventilation_ESP8266_V7_01_TEST_ONLY.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('output/Ventilation_ESP8266_V7_01_TEST_ONLY.bin')
+          b=p.read_bytes()
+          if b[:1]!=b'\xe9' or not 65536<len(b)<1500000:raise SystemExit('Invalid ESP8266 application image')
+          (Path('output/TEST_CANDIDATE_README.txt')).write_text(
+             'Ventilation 7.01 / CommonPlatform 1.05 - TEST ONLY\n'
+             'Mitigation candidate: fail closed instead of streaming HTTP at low heap.\n'
+             'Hardware validation: NOT DONE. Never automatically OTA-promote.\n'
+             'Previous production Ventilation OTA manifest is unchanged.\n'
+             'sha256='+hashlib.sha256(b).hexdigest()+'\n'
+             'md5='+hashlib.md5(b).hexdigest()+'\n'
+             'size='+str(len(b))+'\n')
+          print('TEST image bytes',len(b),'SHA256',hashlib.sha256(b).hexdigest())
+          PY
+      - name: Store TEST candidate (not production OTA, not a GitHub release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ventilation-v7.01-TEST-ONLY
+          path: |
+            output/Ventilation_ESP8266_V7_01_TEST_ONLY.bin
+            output/TEST_CANDIDATE_README.txt
+          retention-days: 14
