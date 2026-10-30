@@ -57,8 +57,8 @@ jobs:
           root=s[first:last]
           for expected in ('snprintf_P(line, sizeof(line)', 'ventilationRootWriteLiteral',
                            'ventilationRootFormatNumber', 'char line[320]',
-                           'action=\\'/fan\\'', 'action=\\'/control\\'',
-                           'action=\\'/schedule\\''):
+                           "action='/fan'", "action='/control'",
+                           "action='/schedule'"):
               if expected not in root: raise SystemExit('Missing fixed-buffer HTML requirement: '+expected)
           if 'String s;' in root or 's+=' in root or 'String(' in root:
               raise SystemExit('Dynamic Arduino String is still used to render root HTML')
