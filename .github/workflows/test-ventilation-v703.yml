@@ -63,7 +63,7 @@ jobs:
               raise SystemExit('Missing pre-service HTTP memory gate')
           if 'maintainMqtt(now)' not in service:
               raise SystemExit('MQTT priority is lost')
-          if '"heap_free"' not in s and r'\\"heap_free\\"' not in s:
+          if 'heap_free' not in s or 'web_deferred' not in s:
               raise SystemExit('Missing retained MQTT memory health telemetry')
           anchor='struct DeviceCredentialRecord;'
           if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
