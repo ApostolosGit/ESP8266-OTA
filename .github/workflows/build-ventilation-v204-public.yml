@@ -1,0 +1,206 @@
+name: Ventilation V2.04 - free public OTA builder
+
+# Only the owner can manually start this workflow from the default branch.
+# No automatic builds on push/PR and no access to private code on PR events.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-ventilation-v204-public.yml'
+  workflow_dispatch:
+    inputs:
+      publish_test_release:
+        description: "Create PUBLIC test-only prerelease BIN after a successful compile (does NOT update the production manifest)"
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: ventilation-v204-builder-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # Only for the optional public TEST prerelease.
+
+jobs:
+  build:
+    name: ESP8266 V2.04 OTA application BIN (one build)
+    if: github.ref == 'refs/heads/main' && github.repository == 'ApostolosGit/ESP8266-OTA.bin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Require private source read-only token
+        env:
+          SOURCE_PAT: ${{ secrets.VENTILATION_SOURCE_READ_TOKEN }}
+        run: |
+          if [ -z "$SOURCE_PAT" ]; then
+            echo "::error::Set VENTILATION_SOURCE_READ_TOKEN in this PUBLIC repository's Actions secrets. Use a fine-grained PAT with Contents: Read-only for ONLY ESP8266-Ventilation."
+            exit 1
+          fi
+
+      - name: Checkout ONLY V2.04 sketch from private repository
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266-Ventilation
+          ref: e3927b161ba8fcf4c8e9f423cbb04940f0cbdfb6
+          token: ${{ secrets.VENTILATION_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: private-src
+          sparse-checkout: |
+            Ventilation_ESP8266_V2_04.ino
+          sparse-checkout-cone-mode: false
+
+      - name: Check V2.04 firmware invariants (never print private source)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("private-src/Ventilation_ESP8266_V2_04.ino")
+          s = p.read_text()
+          for required in (
+              '#define VERSION "2.03"',
+              '#include <ESP8266WiFi.h>',
+              '#include <ArduinoOTA.h>',
+              '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
+              'VENT_FAIL_LIMIT=10',
+              'ventSafeMode=true;ventSafeOutside=true;',
+              'ventSafeMode=true;ventSafeInside=true;',
+              'FAN_ON_LEVEL=HIGH, FAN_OFF_LEVEL=LOW',
+              '"/safe-reset"',
+          ):
+              if required not in s:
+                  raise SystemExit("V2.04 safety/version invariant missing")
+          print("V2.04 source and safety markers verified.")
+          PY
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.x'
+
+      # Cache ONLY public tools and library sources; do NOT cache private sketch,
+      # the checkout directory, build intermediates or generated binaries.
+      - name: Cache ESP8266 core and public libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/packages/esp8266
+            ~/Arduino/libraries
+          key: ${{ runner.os }}-${{ runner.arch }}-vent-v204-esp8266-2.7.2-libraries-v1
+
+      - name: Install ESP8266 core 2.7.2 if not cached
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          if [ ! -d "$HOME/.arduino15/packages/esp8266/hardware/esp8266/2.7.2" ]; then
+            arduino-cli core update-index
+            arduino-cli core install esp8266:esp8266@2.7.2
+          else
+            echo "ESP8266 core 2.7.2 restored from cache."
+          fi
+
+      - name: Install public libraries if missing
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/Arduino/libraries"
+          libs="$HOME/Arduino/libraries"
+          if [ ! -d "$libs/OneWire" ] || [ ! -d "$libs/DallasTemperature" ] ||
+             [ ! -d "$libs/DHT_sensor_library" ] || [ ! -d "$libs/PubSubClient" ]; then
+            arduino-cli lib update-index
+          fi
+          [ -d "$libs/OneWire" ] || arduino-cli lib install "OneWire"
+          [ -d "$libs/DallasTemperature" ] || arduino-cli lib install "DallasTemperature"
+          [ -d "$libs/DHT_sensor_library" ] || arduino-cli lib install "DHT sensor library"
+          [ -d "$libs/PubSubClient" ] || arduino-cli lib install "PubSubClient"
+          if [ ! -d "$libs/DHTesp/.git" ]; then
+            git clone --quiet --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$libs/DHTesp"
+          fi
+
+      - name: Compile one real V2.04 OTA image
+        run: |
+          set -euo pipefail
+          mkdir -p ci_sketch/Ventilation_CI stage build
+          cp private-src/Ventilation_ESP8266_V2_04.ino ci_sketch/Ventilation_CI/Ventilation_CI.ino
+          # Arduino IDE's auto-prototype pass places the checksum function's
+          # generated prototype before LegacyVentCredentialRecord is defined.
+          # Declare only the type in the build copy; never edit private source.
+          python3 - <<'PY'
+          from pathlib import Path
+          sketch = Path("ci_sketch/Ventilation_CI/Ventilation_CI.ino")
+          s = sketch.read_text()
+          anchor = "struct DeviceCredentialRecord;\n"
+          declaration = "struct LegacyVentCredentialRecord;\n"
+          if declaration not in s:
+              if s.count(anchor) != 1:
+                  raise SystemExit("Cannot safely insert ESP8266 Arduino forward declaration")
+              s = s.replace(anchor, anchor + declaration, 1)
+              sketch.write_text(s)
+          print("Arduino auto-prototype compatibility declaration: OK")
+          PY
+          # Public workflow logs must not expose private .ino snippets on errors.
+          # Preserve the compiler transcript only in the ephemeral runner.
+          if ! arduino-cli compile \
+            --fqbn esp8266:esp8266:nodemcuv2 \
+            --output-dir build \
+            ci_sketch/Ventilation_CI > "$RUNNER_TEMP/ventilation-v204-compile.log" 2>&1; then
+            python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          log = (Path(os.environ["RUNNER_TEMP"]) / "ventilation-v204-compile.log").read_text(errors="replace")
+          numbers = sorted({int(n) for n in re.findall(r"\.ino:(\d+):\d+: error:", log)})
+          if numbers:
+              print("Compile failed at sketch line(s): " + ", ".join(map(str, numbers)))
+          else:
+              print("Compile failed; raw diagnostics hidden to protect private source.")
+          PY
+            exit 1
+          fi
+          test -s build/Ventilation_CI.ino.bin
+          cp build/Ventilation_CI.ino.bin stage/Ventilation_ESP8266_V2_04_TEST_ONLY.bin
+          git -C private-src rev-parse HEAD > stage/SOURCE_COMMIT.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("stage/Ventilation_ESP8266_V2_04_TEST_ONLY.bin")
+          header = p.read_bytes()[:1]
+          if header != b'\xe9':
+              raise SystemExit("Invalid ESP8266 application BIN header")
+          if p.stat().st_size < 65536:
+              raise SystemExit("Unexpectedly small ESP8266 OTA image")
+          print("ESP8266 application BIN validated:", p.stat().st_size, "bytes")
+          PY
+          (cd stage && sha256sum Ventilation_ESP8266_V2_04_TEST_ONLY.bin > SHA256SUMS.txt)
+          (cd stage && md5sum Ventilation_ESP8266_V2_04_TEST_ONLY.bin > MD5SUMS.txt)
+          {
+            echo "### ESP8266 Ventilation V2.04 — compile succeeded"
+            echo "Target: NodeMCU / Arduino ESP8266 core 2.7.2"
+            echo "Private source commit: $(cat stage/SOURCE_COMMIT.txt)"
+            echo "BIN size: $(stat -c%s stage/Ventilation_ESP8266_V2_04_TEST_ONLY.bin) bytes"
+            cat stage/SHA256SUMS.txt stage/MD5SUMS.txt
+            echo "This is a TEST candidate, not hardware validated."
+            echo "Existing production manifest is NOT changed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish PUBLIC TEST candidate (never promote manifest automatically)
+        if: ${{ github.event_name == 'push' || inputs.publish_test_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="ventilation-v2.04-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Ventilation ESP8266 V2.04 — TEST BIN (not hardware validated)" \
+            --notes "Compiled from private V2.04 source using the public standard runner. TEST ONLY, not validated on hardware. Does not alter manifest-ventilation.txt or trigger an OTA installation. Before any update, validate device free OTA space, partition layout, fan/relay safe behavior, power stability and recovery plan. Public firmware may reveal embedded configuration." \
+            stage/Ventilation_ESP8266_V2_04_TEST_ONLY.bin \
+            stage/SOURCE_COMMIT.txt \
+            stage/SHA256SUMS.txt \
+            stage/MD5SUMS.txt
+          echo "Public TEST candidate: $tag" >> "$GITHUB_STEP_SUMMARY"
