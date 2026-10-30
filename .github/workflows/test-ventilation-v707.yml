@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ApostolosGit/ESP8266
-          ref: b9f1e32693093326b74f7b61f9ad0824d7fcb1fc
+          ref: e98386de1e8b099e2562c2dec8fc60463bea569d
           path: src
           persist-credentials: false
       - uses: arduino/setup-arduino-cli@v2
@@ -81,8 +81,12 @@ jobs:
           ):
               if method(s,routine)!=method(stable,routine):
                   raise SystemExit('BLOCKED: original fan/sensor/network routine modified: '+routine)
-          if s.count('server.send(')>3:
-              raise SystemExit('Too many ESP8266WebServer::send sites left in web display layer')
+          if s.count('server.send(')!=4:
+              raise SystemExit('Only four old WebServer sends allowed: 303 login/home and two 302 redirects')
+          if s.count('server.send(302, "text/plain", "");')!=2:
+              raise SystemExit('Both Location-bearing setup redirects must be intact')
+          if 'server.send(303, "text/plain", "");' not in s:
+              raise SystemExit('AP login Set-Cookie redirect must be intact')
           anchor='struct DeviceCredentialRecord;'
           if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
           s=s.replace(anchor,anchor+'\nstruct LegacyVentCredentialRecord;',1)
