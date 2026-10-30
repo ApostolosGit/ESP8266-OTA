@@ -33,6 +33,7 @@ jobs:
           arduino-cli lib update-index
           arduino-cli lib install "PubSubClient"
           arduino-cli lib install "U8g2"
+          arduino-cli lib install "ModbusMaster"
           arduino-cli lib install "OneWire"
           arduino-cli lib install "DallasTemperature"
           arduino-cli lib install "DHT sensor library"
