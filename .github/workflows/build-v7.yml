@@ -1,3 +1,4 @@
+# Retry after restoring EnergyMeter CommonPlatform 1.05 web callbacks.
 # Retry after restoring application-specific MQTT enum values and eliminating EnergyMeter duplicate root handler.
 name: Build ESP8266 v7.0 OTA candidates
 on:
