@@ -1,0 +1,116 @@
+name: Build ESP8266 v7.0 OTA candidates
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-v7.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout public ESP8266 source
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: main
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install toolchain and libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "U8g2"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "DHT sensor library"
+          git clone --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$HOME/Arduino/libraries/DHTesp"
+      - name: Compile 3 exact v7.0 device profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('src')
+          tasks=[('EnergyMeter/ESP8266_energymeter_v7.0.ino','EnergyMeter_JSY_MK333_SSD1309_Ver7_0.bin',2),
+                 ('EnergyMeter/ESP8266_energymeter_v7.0.ino','EnergyMeter_DDS238_SSD1309_Ver7_0.bin',1),
+                 ('Ventilation/ESP8266_ventilation_v7.0.ino','Ventilation_ESP8266_V7_0.bin',None)]
+          for index,(path,target,meter) in enumerate(tasks):
+              raw=(src/path).read_text()
+              assert '#define VERSION "7.0"' in raw
+              assert '#define PLATFORM_VERSION "1.05"' in raw
+              if meter is not None:
+                  assert raw.count('#define METER_TYPE 2 // 1: DDS238; 2: JSY-MK333')==1
+                  raw=raw.replace('#define METER_TYPE 2 // 1: DDS238; 2: JSY-MK333',
+                                  f'#define METER_TYPE {meter} // 1: DDS238; 2: JSY-MK333',1)
+              else:
+                  assert '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1' in raw
+              raw=raw.replace('struct DeviceCredentialRecord;','struct DeviceCredentialRecord;\nstruct LegacyVentCredentialRecord;',1) if meter is None else raw
+              sketch=Path(f'ci/{index}/Sketch{index}')
+              sketch.mkdir(parents=True,exist_ok=True)
+              (sketch/f'Sketch{index}.ino').write_text(raw)
+          PY
+          for index in 0 1 2; do
+            arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir "output/build$index" "ci/$index/Sketch$index"
+          done
+          cp output/build0/Sketch0.ino.bin output/EnergyMeter_JSY_MK333_SSD1309_Ver7_0.bin
+          cp output/build1/Sketch1.ino.bin output/EnergyMeter_DDS238_SSD1309_Ver7_0.bin
+          cp output/build2/Sketch2.ino.bin output/Ventilation_ESP8266_V7_0.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in Path('output').glob('*.bin'):
+              assert p.stat().st_size > 65536 and p.read_bytes()[:1] == b'\xe9',p
+              print(p,p.stat().st_size)
+          PY
+      - name: Generate profile-specific OTA manifests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          profiles=[
+           ('EnergyMeter_JSY_MK333_SSD1309_Ver7_0.bin','manifest-jsy.txt','JSY-MK333','SSD1309','energymeter','JSY-MK333','energymeter-jsy-mk333-ssd1309'),
+           ('EnergyMeter_DDS238_SSD1309_Ver7_0.bin','manifest-dds.txt','DDS238','SSD1309','energymeter','DDS238','energymeter-dds238-ssd1309'),
+           ('Ventilation_ESP8266_V7_0.bin','manifest-ventilation.txt','VENTILATION','NONE','ventilation','DS18B20-DHT11','ventilation-3ds18b20-2dht11-none')]
+          for filename,manifest,meter,oled,app,driver,profile in profiles:
+              payload=Path('output',filename).read_bytes()
+              source=Path('src', 'Ventilation/ESP8266_ventilation_v7.0.ino' if app=='ventilation' else 'EnergyMeter/ESP8266_energymeter_v7.0.ino').read_bytes()
+              m=f'version=7.0\nfile={filename}\nsize={len(payload)}\nmd5={hashlib.md5(payload).hexdigest()}\nmeter={meter}\noled={oled}\ncore=ESP8266-2.7.2\nchannel=PUBLIC_OTA\nhardware_validation=UNVERIFIED\nsha256={hashlib.sha256(payload).hexdigest()}\nsource_sha256={hashlib.sha256(source).hexdigest()}\napplication={app}\nplatform_version=1.05\ndriver={driver}\nprofile={profile}\nota_protocol=2\ntransport=https-range\ncredentials=LittleFS-or-setup-portal\n'
+              Path('output',manifest).write_text(m)
+          Path('output/manifest.txt').write_bytes(Path('output/manifest-jsy.txt').read_bytes())
+          PY
+      - name: Verify generated releases before committing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          for manifest in Path('output').glob('manifest*.txt'):
+              fields=dict(line.split('=',1) for line in manifest.read_text().splitlines())
+              p=Path('output',fields['file'])
+              assert p.is_file()
+              b=p.read_bytes()
+              assert len(b)==int(fields['size'])
+              assert hashlib.md5(b).hexdigest()==fields['md5']
+              assert hashlib.sha256(b).hexdigest()==fields['sha256']
+          PY
+      - name: Publish v7.0 binaries and OTA manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp output/*.bin output/manifest*.txt .
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add '*Ver7_0.bin' 'Ventilation_ESP8266_V7_0.bin' manifest.txt manifest-jsy.txt manifest-dds.txt manifest-ventilation.txt
+          git commit -m 'Publish compiled ESP8266 v7.0 OTA images and manifests' || exit 0
+          git push
