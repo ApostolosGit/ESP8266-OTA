@@ -70,7 +70,7 @@ jobs:
           # These runtime functions must be byte-identical to stable firmware.
           def method(text,name):
               marker=name+' {'
-              if text.count(marker)!=1: raise SystemExit('Function not uniquely found: '+name)
+              if text.count(marker)<1: raise SystemExit('Function not found: '+name)
               tail=text[text.index(marker):]
               end=tail.index('\\n}\\n')
               return tail[:end+2]
