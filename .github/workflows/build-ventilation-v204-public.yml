@@ -63,7 +63,7 @@ jobs:
           p = Path("private-src/Ventilation_ESP8266_V2_04.ino")
           s = p.read_text()
           for required in (
-              '#define VERSION "2.03"',
+              '#define VERSION "2.04"',
               '#include <ESP8266WiFi.h>',
               '#include <ArduinoOTA.h>',
               '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
