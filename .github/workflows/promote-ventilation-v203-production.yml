@@ -1,0 +1,185 @@
+name: Promote Ventilation ESP8266 V2.03 to production OTA
+
+# Intentional one-time production promotion after the owner's explicit approval.
+# Trigger when this workflow is added to main. No firmware is flashed and no
+# MQTT command is sent. Run workflow manually if a permitted publish retry is needed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-ventilation-v203-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ventilation-v203-production-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.repository == 'ApostolosGit/ESP8266-OTA.bin' && github.ref == 'refs/heads/main'
+    name: Verify and publish V2.03 production image + matching manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout public OTA repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Download known-good public V2.03 test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ota-promotion-stage
+          gh release download ventilation-v2.03-test-41081881950-1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir .ota-promotion-stage \
+            --pattern 'Ventilation_ESP8266_V2_03_TEST_ONLY.bin' \
+            --pattern 'SOURCE_COMMIT.txt' \
+            --pattern 'SHA256SUMS.txt' \
+            --pattern 'MD5SUMS.txt'
+          cd .ota-promotion-stage
+          sha256sum -c SHA256SUMS.txt
+          md5sum -c MD5SUMS.txt
+          printf '%s  %s\n' '5f28d1247425522a5b0c9785115cae8873902494481d835d8d287f6e0625a35d' 'Ventilation_ESP8266_V2_03_TEST_ONLY.bin' | sha256sum -c -
+          printf '%s  %s\n' 'bfe43da5608f113b79519d65563c6da6' 'Ventilation_ESP8266_V2_03_TEST_ONLY.bin' | md5sum -c -
+
+      - name: Promote image, production manifest and matching validator ATOMICALLY
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, re
+
+          stage = Path(".ota-promotion-stage")
+          src = stage / "Ventilation_ESP8266_V2_03_TEST_ONLY.bin"
+          dest = Path("Ventilation_ESP8266_V2_03.bin")
+          binary = src.read_bytes()
+          assert len(binary) == 587952 and binary[0] == 0xE9
+          expected_sha = "5f28d1247425522a5b0c9785115cae8873902494481d835d8d287f6e0625a35d"
+          expected_md5 = "bfe43da5608f113b79519d65563c6da6"
+          assert hashlib.sha256(binary).hexdigest() == expected_sha
+          assert hashlib.md5(binary).hexdigest() == expected_md5
+
+          build_commit = (stage / "SOURCE_COMMIT.txt").read_text().strip()
+          assert re.fullmatch(r"[0-9a-f]{40}", build_commit), "Invalid pinned private source commit"
+          assert build_commit == "c9b5df3edd92a67426becae2a5c071f15f2c2af2", "Source commit differs from reviewed V2.03"
+
+          if dest.exists() and dest.read_bytes() != binary:
+              raise SystemExit("A different V2.03 production BIN already exists; refuse overwrite")
+          dest.write_bytes(binary)
+
+          manifest = Path("manifest-ventilation.txt")
+          existing = manifest.read_text()
+          fields = {}
+          for line in existing.splitlines():
+              if "=" not in line:
+                  raise SystemExit("Unexpected manifest format")
+              key, val = line.split("=", 1)
+              if key in fields:
+                  raise SystemExit("Duplicate manifest entry")
+              fields[key] = val
+          if fields.get("version") not in ("2.02", "2.03"):
+              raise SystemExit("Only expected V2.02 -> V2.03 promotion is permitted")
+          values = {
+              "version": "2.03",
+              "file": dest.name,
+              "size": str(len(binary)),
+              "md5": expected_md5,
+              "sha256": expected_sha,
+              "build": build_commit,
+              "source_sha256": "b938cf44f2272fff5492f895115944914bcf96e396a74875f46aa05579cbf29e",
+              "platform_version": "1.04",
+              # No physical hardware verification has been performed.
+              "hardware_validation": "UNVERIFIED",
+          }
+          for key, val in values.items():
+              if key not in fields:
+                  raise SystemExit("Required existing manifest key not found: " + key)
+              fields[key] = val
+          for key, val in {
+              "meter": "VENTILATION", "application": "ventilation",
+              "driver": "DS18B20-DHT11", "oled": "NONE",
+              "profile": "ventilation-3ds18b20-2dht11-none", "ota_protocol": "2",
+              "core": "ESP8266-2.7.2", "transport": "https-range",
+              "credentials": "LittleFS-migration-or-setup-portal",
+              "local_ip": "192.168.1.81",
+          }.items():
+              assert fields.get(key) == val, f"Unexpected profile value: {key}"
+          manifest.write_text("".join(f"{k}={v}\n" for k, v in fields.items()))
+
+          checks = Path("tests/verify_release.py")
+          script = checks.read_text()
+          changes = (
+              ('BASE = "https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA/main/"',
+               'BASE = "https://raw.githubusercontent.com/ApostolosGit/ESP8266-OTA.bin/main/"'),
+              ('VENTILATION_VERSION = "2.02"', 'VENTILATION_VERSION = "2.03"'),
+              ('fields["file"] == "Ventilation_ESP8266_V2_02.bin"',
+               'fields["file"] == "Ventilation_ESP8266_V2_03.bin"'),
+              ('"platform_version": "1.03", "driver": "DS18B20-DHT11",',
+               '"platform_version": "1.04", "driver": "DS18B20-DHT11",'),
+          )
+          for before, after in changes:
+              if script.count(before) != 1:
+                  raise SystemExit("Validation script changed unexpectedly; abort production promotion")
+              script = script.replace(before, after, 1)
+          checks.write_text(script)
+          print(f"Staged production {dest}: {len(binary)} bytes")
+          print(f"Source: {build_commit}")
+          print("Manifest: version=2.03, profile intact, hardware_validation=UNVERIFIED")
+          PY
+
+      - name: Verify ALL existing OTA release manifests and local binaries
+        run: |
+          set -euo pipefail
+          python3 tests/verify_release.py
+
+      - name: Commit complete V2.03 production update in one git commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Ventilation_ESP8266_V2_03.bin manifest-ventilation.txt tests/verify_release.py
+          if git diff --staged --quiet; then
+            echo "Production state already matches intended V2.03 image."
+          else
+            git commit -m "release: promote verified Ventilation ESP8266 V2.03 OTA BIN and manifest"
+            git push origin HEAD:main
+          fi
+
+      - name: Verify publicly served production manifest, image and 206 byte ranges
+        run: |
+          set -euo pipefail
+          python3 tests/verify_release.py --remote
+
+      - name: Publish V2.03 production GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=ventilation-v2.03
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Production release already exists; not overwriting it."
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target main \
+              --title "Ventilation ESP8266 V2.03 - Production OTA" \
+              --notes "Production OTA binary promoted by repository owner request from the checksum-verified V2.03 test candidate. Public manifest-ventilation.txt points to the same bytes. WARNING: hardware_validation=UNVERIFIED; no field OTA or physical relay/SafeMode validation has been performed. OTA installation is NOT automatic and should be initiated only with a recovery plan. MQTT and OTA firmware currently use setInsecure() TLS." \
+              Ventilation_ESP8266_V2_03.bin
+          fi
+          {
+            echo "### Production Ventilation V2.03 promotion"
+            echo "BIN: Ventilation_ESP8266_V2_03.bin (587952 bytes)"
+            echo "MD5: bfe43da5608f113b79519d65563c6da6"
+            echo "SHA256: 5f28d1247425522a5b0c9785115cae8873902494481d835d8d287f6e0625a35d"
+            echo "Public production manifest updated. hardware_validation=UNVERIFIED."
+            echo "No MQTT command or device OTA action was triggered."
+          } >> "$GITHUB_STEP_SUMMARY"
