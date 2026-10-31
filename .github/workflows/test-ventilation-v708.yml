@@ -71,7 +71,8 @@ jobs:
           route='    server.on("/restart-esp", HTTP_POST, handleNormalEspRestart);'+chr(10)
           if test.count(route)!=1: raise SystemExit('Restart route missing or ambiguous')
           test=test.replace(route,'',1)
-          begin=test.index('        "<form method=')
+          form_ref=test.index("action='/restart-esp'")
+          begin=test.rfind('        "<form method=',0,form_ref)
           finish=test.index('        "<p><a href=',begin)
           form=test[begin:finish]
           if form.count('action=')!=1 or '/restart-esp' not in form or 'confirm' not in form or 'RESTART' not in form:
