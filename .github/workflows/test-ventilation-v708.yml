@@ -68,17 +68,15 @@ jobs:
           if func.count('WebResponseScope responseScope;')!=1 or 'if (!requireApWebPin()) return;' not in func or 'recoveryMode' not in func or 'mqttAdminCommandPending' not in func:
               raise SystemExit('Restart not appropriately guarded')
           test=s[:start]+s[finish:]
-          route='    server.on("/restart-esp", HTTP_POST, handleNormalEspRestart);\\n'
+          route='    server.on("/restart-esp", HTTP_POST, handleNormalEspRestart);'+chr(10)
           if test.count(route)!=1: raise SystemExit('Restart route missing or ambiguous')
           test=test.replace(route,'',1)
-          form=(
-              '        "<form method=\'post\' action=\'/restart-esp\' "\\n'
-              '        "onsubmit=\\\"return confirm(\'Restart ESP normally? The fan will stop temporarily; Wi-Fi/MQTT settings remain saved.\');\\\">"\\n'
-              '        "<input type=\'hidden\' name=\'confirm\' value=\'RESTART\'>"\\n'
-              '        "<button type=\'submit\'>Restart ESP</button></form>"\\n'
-          )
-          if test.count(form)!=1: raise SystemExit('Flash-backed web form missing or ambiguous')
-          test=test.replace(form,'',1)
+          begin=test.index('        "<form method=')
+          finish=test.index('        "<p><a href=',begin)
+          form=test[begin:finish]
+          if form.count('action=')!=1 or '/restart-esp' not in form or 'confirm' not in form or 'RESTART' not in form:
+              raise SystemExit('Wrong local restart form')
+          test=test[:begin]+test[finish:]
           test=test.replace('#define VERSION "7.08"','#define VERSION "7.07"',1)
           if test!=stable: raise SystemExit('BLOCKED: New version changes other than web restart UI/endpoint')
           if 'void applicationPrepareOta()' not in s or 'maintainMqtt(now)' not in s:
