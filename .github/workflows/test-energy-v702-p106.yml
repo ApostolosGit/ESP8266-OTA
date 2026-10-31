@@ -1,0 +1,88 @@
+name: EnergyMeter v7.02 TEST from CommonPlatform 1.06
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/test-energy-v702-p106.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ESP8266 CommonPlatform and EnergyMeter sources
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: 326eefce4654a5302b96cae9e98c7aed0f8a2345
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP8266 core and meter/display libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "ModbusMaster"
+          arduino-cli lib install "U8g2"
+      - name: Verify CommonPlatform code generation and compile (TEST only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/EnergyMeter_CI output
+          python3 - <<'PY'
+          from pathlib import Path
+          platform=Path('src/CommonPlatform/ESP8266_CommonPlatform_V1_06.ino').read_text()
+          previous=Path('src/EnergyMeter/ESP8266_energymeter_v7.01.ino').read_text()
+          actual=Path('src/EnergyMeter/ESP8266_energymeter_v7.02_platform106_TEST.ino').read_text()
+          def section(text,start,end):
+              if text.count(start)!=1 or text.count(end)!=1:raise SystemExit('Missing unique markers')
+              return text.split(start,1)[1].split(end,1)[0]
+          def inject(base,tag,new):
+              a='// BEGIN '+tag+'\n'; b='// END '+tag
+              old=section(base,a,b)
+              return base.replace(a+old+b,a+new+b,1)
+          profile=section(previous,'// BEGIN PLATFORM PROFILE\n','// END PLATFORM PROFILE')
+          profile=profile.replace('#define PLATFORM_VERSION "1.05"','#define PLATFORM_VERSION "1.06"').replace('#define VERSION "7.01"','#define VERSION "7.02"')
+          generated=platform
+          for tag,new in (('PLATFORM PROFILE',profile),
+                          ('APPLICATION DECLARATIONS',section(previous,'// BEGIN APPLICATION DECLARATIONS\n','// END APPLICATION DECLARATIONS')),
+                          ('APPLICATION IMPLEMENTATION',section(previous,'// BEGIN APPLICATION IMPLEMENTATION\n','// END APPLICATION IMPLEMENTATION'))):
+              generated=inject(generated,tag,new)
+          enums=section(previous,'    MQTT_ADMIN_RESTART,\n','    MQTT_ADMIN_INVALID').rstrip()
+          if generated.count('    // APPLICATION COMMAND ENUM')!=1:raise SystemExit('Missing command extension')
+          generated=generated.replace('    // APPLICATION COMMAND ENUM',enums,1)
+          expected='// GENERATED TEST candidate: ESP8266 CommonPlatform 1.06 + EnergyMeter v7.01 application modules; no hardware validation.\n'+generated
+          if actual!=expected: raise SystemExit('BLOCKED: EnergyMeter app logic differs from original or CommonPlatform does not match')
+          assert '#define PLATFORM_VERSION "1.06"' in actual
+          assert '#define VERSION "7.02"' in actual
+          assert 'Restart ESP (normal reboot)' in actual
+          assert 'bool streamRecoveryReport(' in actual
+          Path('ci/EnergyMeter_CI/EnergyMeter_CI.ino').write_text(actual)
+          PY
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir output ci/EnergyMeter_CI
+          test -s output/EnergyMeter_CI.ino.bin
+          mv output/EnergyMeter_CI.ino.bin output/EnergyMeter_V7_02_CP106_TEST_ONLY.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          b=Path('output/EnergyMeter_V7_02_CP106_TEST_ONLY.bin').read_bytes()
+          if b[:1]!=b'\xe9' or not 65536<len(b)<1500000:raise SystemExit('Invalid ESP8266 image')
+          Path('output/README-TEST.txt').write_text('EnergyMeter 7.02 / CommonPlatform 1.06\nTEST ONLY - not released, not hardware validated.\nsha256='+hashlib.sha256(b).hexdigest()+'\n')
+          print('EnergyMeter test size',len(b),'SHA256',hashlib.sha256(b).hexdigest())
+          PY
+      - name: Store test-only candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnergyMeter-v7.02-CommonPlatform106-TEST-ONLY
+          path: |
+            output/EnergyMeter_V7_02_CP106_TEST_ONLY.bin
+            output/README-TEST.txt
+          retention-days: 14
