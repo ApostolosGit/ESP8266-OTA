@@ -42,7 +42,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('src/Ventilation/ESP8266_ventilation_v7.08_platform106_TEST.ino').read_text()
-          for invariant in ('#define VERSION "7.08"','#define PLATFORM_VERSION "1.04"',
+          for invariant in ('#define VERSION "7.08"','#define PLATFORM_VERSION "1.06"',
                             '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
                             '#define OTA_PROFILE_PREFIX "ventilation-3ds18b20-2dht11"',
                             '#define OLED_TYPE 0','#define SITE_IP_D 81',
