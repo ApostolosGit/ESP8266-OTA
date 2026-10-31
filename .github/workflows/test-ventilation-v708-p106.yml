@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ApostolosGit/ESP8266
-          ref: 51a2710686da30ceb287dafd085d6594ff76fe24
+          ref: 446603ffec456b085bc0f43dc8202544bb776a85
           path: src
           persist-credentials: false
       - uses: arduino/setup-arduino-cli@v2
