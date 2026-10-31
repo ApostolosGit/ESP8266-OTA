@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ApostolosGit/ESP8266
-          ref: 7123760e495e2f080368b388175b57983806050b
+          ref: 51a2710686da30ceb287dafd085d6594ff76fe24
           path: src
           persist-credentials: false
       - uses: arduino/setup-arduino-cli@v2
@@ -70,6 +70,8 @@ jobs:
               ('APPLICATION IMPLEMENTATION',section(stable,'// BEGIN APPLICATION IMPLEMENTATION\n','// END APPLICATION IMPLEMENTATION'))
           ):
               generated=inject(generated,tag,content)
+          if generated.count('    // APPLICATION COMMAND ENUM')!=1: raise SystemExit('Missing application enum insertion')
+          generated=generated.replace('    // APPLICATION COMMAND ENUM','    MQTT_ADMIN_VENTILATION,',1)
           expected='// GENERATED test candidate: ESP8266 CommonPlatform 1.06 + Ventilation v7.07 application modules; no hardware validation.\n'+generated
           if expected!=s: raise SystemExit('BLOCKED: generated source does not match CommonPlatform 1.06 plus unchanged Ventilation v7.07 application')
           if '#define PLATFORM_VERSION "1.06"' not in s or '#define OTA_PROTOCOL_VERSION 2' not in s:
