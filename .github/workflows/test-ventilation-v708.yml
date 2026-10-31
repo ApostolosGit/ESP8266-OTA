@@ -1,0 +1,117 @@
+name: Ventilation v7.08 TEST-only recovery candidate
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/test-ventilation-v708.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned v7.08 source
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: 79b17b5814982787e0ccc04f726851a77ccb1136
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino ESP8266 core and public libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "DHT sensor library"
+          git clone --quiet --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$HOME/Arduino/libraries/DHTesp"
+      - name: Compile and verify TEST-only firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/Ventilation_CI output
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('src/Ventilation/ESP8266_ventilation_v7.08.ino').read_text()
+          for invariant in ('#define VERSION "7.08"','#define PLATFORM_VERSION "1.04"',
+                            '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
+                            '#define OTA_PROFILE_PREFIX "ventilation-3ds18b20-2dht11"',
+                            '#define OLED_TYPE 0','#define SITE_IP_D 81',
+                            '#define PLATFORM_WEB_MIN_HEAP_BYTES 2048UL',
+                            'const uint32_t WEB_ROOT_MIN_HEAP_BYTES = 1024UL;',
+                            'void applicationPrepareOta()', 'applicationEarlyInitialize();'):
+              if invariant not in s:
+                  raise SystemExit('Missing v7.08 source invariant')
+          # V7.08 = V7.07 plus ONLY a normal-web Restart ESP form, endpoint, and version.
+          stable=Path('src/Ventilation/ESP8266_ventilation_v7.07.ino').read_text()
+          if stable.count('#define VERSION "7.07"')!=1 or s.count('#define VERSION "7.08"')!=1:
+              raise SystemExit('Wrong base/new version')
+          if '#define PLATFORM_VERSION "1.04"' not in s or '#define OTA_PROTOCOL_VERSION 2' not in s or 'const unsigned long WEB_RESPONSE_BUDGET_MS = 10000UL;' not in s:
+              raise SystemExit('Platform, OTA profile or 10 s web budget altered')
+          if 'void handleNormalEspRestart() {' not in s or "server.on(\"/restart-esp\", HTTP_POST, handleNormalEspRestart);" not in s:
+              raise SystemExit('New POST restart endpoint missing')
+          if 'server.arg("confirm") != "RESTART"' not in s or 'mqttAdminRestartPending = true;' not in s:
+              raise SystemExit('Restart confirmation or normal restart scheduling missing')
+          # Full source reconstitution verifies that no existing functionality changed.
+          start=s.index('void handleNormalEspRestart() {')
+          finish=s.index('void handleNetworkDebugPage() {',start)
+          func=s[start:finish]
+          if func.count('WebResponseScope responseScope;')!=1 or 'if (!requireApWebPin()) return;' not in func or 'recoveryMode' not in func or 'mqttAdminCommandPending' not in func:
+              raise SystemExit('Restart not appropriately guarded')
+          test=s[:start]+s[finish:]
+          route='    server.on("/restart-esp", HTTP_POST, handleNormalEspRestart);\\n'
+          if test.count(route)!=1: raise SystemExit('Restart route missing or ambiguous')
+          test=test.replace(route,'',1)
+          form=(
+              '        "<form method=\'post\' action=\'/restart-esp\' "\\n'
+              '        "onsubmit=\\\"return confirm(\'Restart ESP normally? The fan will stop temporarily; Wi-Fi/MQTT settings remain saved.\');\\\">"\\n'
+              '        "<input type=\'hidden\' name=\'confirm\' value=\'RESTART\'>"\\n'
+              '        "<button type=\'submit\'>Restart ESP</button></form>"\\n'
+          )
+          if test.count(form)!=1: raise SystemExit('Flash-backed web form missing or ambiguous')
+          test=test.replace(form,'',1)
+          test=test.replace('#define VERSION "7.08"','#define VERSION "7.07"',1)
+          if test!=stable: raise SystemExit('BLOCKED: New version changes other than web restart UI/endpoint')
+          if 'void applicationPrepareOta()' not in s or 'maintainMqtt(now)' not in s:
+              raise SystemExit('Normal control runtime missing')
+          anchor='struct DeviceCredentialRecord;'
+          if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
+          s=s.replace(anchor,anchor+'\nstruct LegacyVentCredentialRecord;',1)
+          Path('ci/Ventilation_CI/Ventilation_CI.ino').write_text(s)
+          PY
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir output ci/Ventilation_CI
+          test -s output/Ventilation_CI.ino.bin
+          mv output/Ventilation_CI.ino.bin output/Ventilation_ESP8266_V7_08_TEST_ONLY.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('output/Ventilation_ESP8266_V7_08_TEST_ONLY.bin')
+          b=p.read_bytes()
+          if b[:1]!=b'\xe9' or not 65536<len(b)<1500000:raise SystemExit('Invalid ESP8266 application image')
+          (Path('output/TEST_CANDIDATE_README.txt')).write_text(
+             'Ventilation 7.08 / CommonPlatform 1.04 - TEST ONLY\n'
+             'Normal web Restart ESP with POST and browser confirmation; reuses existing MQTT normal reboot state machine.\n'
+             'Hardware validation: NOT DONE. Never automatically OTA-promote.\n'
+             'Previous production Ventilation OTA manifest is unchanged.\n'
+             'sha256='+hashlib.sha256(b).hexdigest()+'\n'
+             'md5='+hashlib.md5(b).hexdigest()+'\n'
+             'size='+str(len(b))+'\n')
+          print('TEST image bytes',len(b),'SHA256',hashlib.sha256(b).hexdigest())
+          PY
+      - name: Store TEST candidate (not production OTA, not a GitHub release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ventilation-v7.08-TEST-ONLY
+          path: |
+            output/Ventilation_ESP8266_V7_08_TEST_ONLY.bin
+            output/TEST_CANDIDATE_README.txt
+          retention-days: 14
