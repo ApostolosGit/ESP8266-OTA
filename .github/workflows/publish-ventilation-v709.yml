@@ -1,0 +1,166 @@
+name: Publish Ventilation v7.09 OTA for MQTT.app
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-ventilation-v709.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned v7.09 source
+        uses: actions/checkout@v4
+        with:
+          repository: ApostolosGit/ESP8266
+          ref: cff594158eb986204035b19b8f2d34d742cb15da
+          path: src
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino ESP8266 core and public libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@2.7.2
+          arduino-cli lib update-index
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "DHT sensor library"
+          git clone --quiet --depth 1 https://github.com/beegee-tokyo/DHTesp.git "$HOME/Arduino/libraries/DHTesp"
+      - name: Compile and verify reproducible v7.09 image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/Ventilation_CI output
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('src/Ventilation/ESP8266_ventilation_v7.09.ino').read_text()
+          for invariant in ('#define VERSION "7.09"','#define PLATFORM_VERSION "1.04"',
+                            '#define PLATFORM_LOCAL_CONTROL_APPLICATION 1',
+                            '#define OTA_PROFILE_PREFIX "ventilation-3ds18b20-2dht11"',
+                            '#define OLED_TYPE 0','#define SITE_IP_D 81',
+                            '#define PLATFORM_WEB_MIN_HEAP_BYTES 2048UL',
+                            'const uint32_t WEB_ROOT_MIN_HEAP_BYTES = 1024UL;',
+                            'void applicationPrepareOta()', 'applicationEarlyInitialize();'):
+              if invariant not in s:
+                  raise SystemExit('Missing v7.09 source invariant')
+          # Reconstruct the generated sketch from actual CommonPlatform 1.06.
+          platform=Path('src/CommonPlatform/ESP8266_CommonPlatform_V1_06.ino').read_text()
+          stable=Path('src/Ventilation/ESP8266_ventilation_v7.07.ino').read_text()
+          def section(text,start,end):
+              if text.count(start)!=1 or text.count(end)!=1: raise SystemExit('Missing generation markers')
+              return text.split(start,1)[1].split(end,1)[0]
+          def inject(source,tag,replacement):
+              start='// BEGIN '+tag+'\n'; end='// END '+tag
+              old=section(source,start,end)
+              return source.replace(start+old+end,start+replacement+end,1)
+          profile=section(stable,'// BEGIN PLATFORM PROFILE\n','// END PLATFORM PROFILE')
+          profile=profile.replace('#define PLATFORM_VERSION "1.04"','#define PLATFORM_VERSION "1.06"').replace('#define VERSION "7.07"','#define VERSION "7.09"')
+          generated=platform
+          for tag,content in (
+              ('PLATFORM PROFILE',profile),
+              ('APPLICATION DECLARATIONS',section(stable,'// BEGIN APPLICATION DECLARATIONS\n','// END APPLICATION DECLARATIONS')),
+              ('APPLICATION IMPLEMENTATION',section(stable,'// BEGIN APPLICATION IMPLEMENTATION\n','// END APPLICATION IMPLEMENTATION'))
+          ):
+              generated=inject(generated,tag,content)
+          if generated.count('    // APPLICATION COMMAND ENUM')!=1: raise SystemExit('Missing application enum insertion')
+          generated=generated.replace('    // APPLICATION COMMAND ENUM','    MQTT_ADMIN_VENTILATION,',1)
+          expected='// GENERATED: ESP8266 CommonPlatform 1.06 + Ventilation v7.07 application modules; no hardware validation.\n'+generated
+          if expected!=s: raise SystemExit('BLOCKED: generated source does not match CommonPlatform 1.06 plus unchanged Ventilation v7.07 application')
+          if '#define PLATFORM_VERSION "1.06"' not in s or '#define OTA_PROTOCOL_VERSION 2' not in s:
+              raise SystemExit('Wrong platform/OTA protocol')
+          if 'const unsigned long WEB_RESPONSE_BUDGET_MS = 10000UL;' not in s:
+              raise SystemExit('10-second Network Debug timeout missing')
+          if 'Restart ESP (normal reboot)' not in s or 'bool streamRecoveryReport(' not in s:
+              raise SystemExit('Recovery UI or bounded diagnostic writer missing')
+          if 'void applicationPrepareOta()' not in s or 'maintainMqtt(now)' not in s:
+              raise SystemExit('Missing domain logic')
+          anchor='struct DeviceCredentialRecord;'
+          if s.count(anchor)!=1:raise SystemExit('Missing prototype placement anchor')
+          s=s.replace(anchor,anchor+'\nstruct LegacyVentCredentialRecord;',1)
+          Path('ci/Ventilation_CI/Ventilation_CI.ino').write_text(s)
+          PY
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir output ci/Ventilation_CI
+          test -s output/Ventilation_CI.ino.bin
+          mv output/Ventilation_CI.ino.bin output/Ventilation_ESP8266_V7_09.bin
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('output/Ventilation_ESP8266_V7_09.bin')
+          b=p.read_bytes()
+          if b[:1]!=b'\xe9' or not 65536<len(b)<1500000:raise SystemExit('Invalid ESP8266 application image')
+
+          expected_sha='23f572a77017212497457d019100c26e342e83b5a31568644eb1d02286d8b198'
+          expected_size=589472
+          if len(b)!=expected_size or hashlib.sha256(b).hexdigest()!=expected_sha:
+              raise SystemExit('BLOCKED: compiled image differs from successful v7.09 TEST candidate')
+          source=Path('src/Ventilation/ESP8266_ventilation_v7.09.ino').read_bytes()
+          manifest=(
+             'version=7.09\n'
+             'file=Ventilation_ESP8266_V7_09.bin\n'
+             f'size={len(b)}\n'
+             f'md5={hashlib.md5(b).hexdigest()}\n'
+             'meter=VENTILATION\n'
+             'oled=NONE\n'
+             'core=ESP8266-2.7.2\n'
+             'channel=PUBLIC_OTA\n'
+             'hardware_validation=UNVERIFIED\n'
+             f'sha256={hashlib.sha256(b).hexdigest()}\n'
+             f'source_sha256={hashlib.sha256(source).hexdigest()}\n'
+             'application=ventilation\n'
+             'platform_version=1.06\n'
+             'driver=DS18B20-DHT11\n'
+             'profile=ventilation-3ds18b20-2dht11-none\n'
+             'ota_protocol=2\n'
+             'transport=https-range\n'
+             'credentials=LittleFS-or-setup-portal\n'
+          )
+          Path('output/manifest-ventilation.txt').write_text(manifest)
+          print('Verified OTA image bytes',len(b),'SHA256',hashlib.sha256(b).hexdigest())
+          PY
+      - name: Validate exact APP compatibility and manifest integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,hashlib
+          manifest=dict(line.split('=',1) for line in Path('output/manifest-ventilation.txt').read_text().splitlines())
+          b=Path('output',manifest['file']).read_bytes()
+          match=re.fullmatch(r'Ventilation_ESP8266_V(\d+)_(\d{1,2})\.bin',manifest['file'])
+          assert match and manifest['version']==f'{int(match.group(1))}.{match.group(2)}'
+          assert manifest['version']=='7.09'
+          assert len(b)==int(manifest['size'])
+          assert hashlib.md5(b).hexdigest()==manifest['md5']
+          assert hashlib.sha256(b).hexdigest()==manifest['sha256']
+          assert manifest['profile']=='ventilation-3ds18b20-2dht11-none'
+          assert manifest['hardware_validation']=='UNVERIFIED'
+          assert manifest['ota_protocol']=='2'
+          source=Path('src/Ventilation/ESP8266_ventilation_v7.09.ino').read_bytes()
+          assert hashlib.sha256(source).hexdigest()==manifest['source_sha256']
+          old=dict(line.split('=',1) for line in Path('manifest-ventilation.txt').read_text().splitlines())
+          assert old['version'] in ('7.07','7.09'),'Unexpected previous Ventilation OTA version: do not overwrite'
+          print('v7.09 exact filename/version/profile/hash verified')
+          PY
+      - name: Publish Ventilation v7.09 for manual MQTT APP OTA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp output/Ventilation_ESP8266_V7_09.bin .
+          cp output/manifest-ventilation.txt .
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- Ventilation_ESP8266_V7_09.bin manifest-ventilation.txt
+          if git diff --cached --quiet; then
+            echo 'Same validated v7.09 already published.'
+            exit 0
+          fi
+          git commit -m 'Publish Ventilation v7.09 OTA with verified BIN and manifest (hardware unverified)'
+          git push
